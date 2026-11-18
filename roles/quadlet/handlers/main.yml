@@ -1,0 +1,20 @@
+---
+- name: Reload the user manager
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    argv:
+      - systemctl
+      - --user
+      - daemon-reload
+  become: true
+  become_user: "{{ quadlet_user }}"
+  environment:
+    HOME: "{{ quadlet_home }}"
+    USER: "{{ quadlet_user }}"
+    LOGNAME: "{{ quadlet_user }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ quadlet_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ quadlet_uid }}/bus"
+  when:
+    - not ansible_check_mode
+    - quadlet_enabled | bool
+    - quadlet_reload | bool
+  changed_when: true

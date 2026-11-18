@@ -1,0 +1,20 @@
+---
+# The shape of a site vault, for reference only. Never encrypt this file, never
+# use it by a run: the real file is `vault.yml` beside it, encrypted with
+# `ansible-vault` and committed as ciphertext.
+#
+# Create it with:
+#   cp group_vars/all/vault.yml.example group_vars/all/vault.yml
+#   # replace every CHANGEME value
+#   ansible-vault encrypt group_vars/all/vault.yml
+#
+# Run with `--ask-vault-pass` (or a password file outside this tree).
+#
+# Every name is prefixed `vault_` and is mapped onto the name a unit file reads
+# in `group_vars/all/vars.yml`, so a unit declaration never names a `vault_`
+# variable.
+#
+# The product itself needs no secret. A site that passes one to a unit keeps the
+# real value here and the mapping in `group_vars/all/vars.yml`:
+#
+# vault_container_example_password: "CHANGEME"

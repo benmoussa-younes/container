@@ -1,0 +1,186 @@
+---
+# The site's Quadlet units. Nothing is pulled, created or started here.
+- name: The Quadlet declarations are configured
+  when: quadlet_enabled | bool
+  block:
+    - name: The owning account is declared
+      ansible.builtin.assert:
+        that:
+          - quadlet_user | length > 0
+          - quadlet_user != 'root'
+        fail_msg: >-
+          quadlet_user must name an existing non-root account. The rootful
+          generator reads /etc/containers/systemd and is not configured here.
+
+    - name: The owning account is read
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ quadlet_user }}"
+
+    - name: The owning account's groups are read
+      ansible.builtin.getent:
+        database: group
+
+    - name: The owning account exists
+      ansible.builtin.assert:
+        that:
+          - quadlet_user in ansible_facts.getent_passwd
+        fail_msg: "{{ quadlet_user }} does not exist on this host."
+
+    - name: The owning account's UID, GID and home are known
+      ansible.builtin.set_fact:
+        quadlet_uid: "{{ ansible_facts.getent_passwd[quadlet_user][1] }}"
+        quadlet_gid: "{{ ansible_facts.getent_passwd[quadlet_user][2] }}"
+        quadlet_home: "{{ ansible_facts.getent_passwd[quadlet_user][4] }}"
+
+    - name: The owning account's primary group is known
+      ansible.builtin.set_fact:
+        quadlet_group: >-
+          {{ ansible_facts.getent_group | dict2items
+             | selectattr('value.1', 'equalto', quadlet_gid)
+             | map(attribute='key') | list | first }}
+
+    # A declaration is validated before anything is written: a typo must fail
+    # the run, not leave a unit the generator silently ignores.
+    - name: Every declaration is complete
+      ansible.builtin.assert:
+        that:
+          - item.name is defined and item.name | length > 0
+          - item.name is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+          - item.name is not search('\\.(container|volume|network|pod|image|build|kube)$')
+          - item.type is defined and item.type in quadlet_types
+          - (item.state | default('present')) in ['present', 'absent']
+          - (item.state | default('present')) == 'absent' or item.content is defined
+        fail_msg: >-
+          `{{ item | to_json }}` is not a complete declaration: it needs a name
+          without suffix, a known type and, unless it is absent, a content.
+        quiet: true
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name | default('?') }}"
+
+    - name: The generator directory exists
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}"
+        state: directory
+        owner: "{{ quadlet_user }}"
+        group: "{{ quadlet_group }}"
+        mode: "0755"
+
+    - name: The global hardening directory exists
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}/container.d"
+        state: directory
+        owner: "{{ quadlet_user }}"
+        group: "{{ quadlet_group }}"
+        mode: "0755"
+      when: quadlet_hardened_defaults | bool
+
+    - name: The product's hardening drop-in is declared
+      ansible.builtin.template:
+        src: hardening-dropin.j2
+        dest: "{{ quadlet_directory }}/container.d/10-container-edition.conf"
+        owner: "{{ quadlet_user }}"
+        group: "{{ quadlet_group }}"
+        mode: "0644"
+      when: quadlet_hardened_defaults | bool
+      notify: Reload the user manager
+
+    - name: The forbidden declarations are compiled once
+      ansible.builtin.set_fact:
+        quadlet_forbidden_pattern: >-
+          {{ '(?m)^[ \t]*('
+             ~ (quadlet_forbidden | map('regex_escape') | join('|'))
+             ~ ')[ \t]*$' }}
+      when:
+        - quadlet_hardened_defaults | bool
+        - quadlet_forbidden | length > 0
+
+    - name: No declared container unit relaxes the hardening defaults
+      ansible.builtin.assert:
+        that:
+          - item.content is not search(quadlet_forbidden_pattern)
+        fail_msg: >-
+          `{{ item.name }}` declares a key the product forbids while the
+          hardened defaults are on: {{ quadlet_forbidden | join(', ') }}.
+          Remove it, or add a drop-in beside the unit
+          (`{{ item.name }}.container.d/`) that relaxes the one key it needs,
+          or empty `quadlet_forbidden` deliberately.
+        quiet: true
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - quadlet_hardened_defaults | bool
+        - quadlet_forbidden | length > 0
+        - (item.type | default('')) == 'container'
+        - (item.state | default('present')) == 'present'
+
+    - name: The declared units are written
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}"
+        owner: "{{ quadlet_user }}"
+        group: "{{ quadlet_group }}"
+        mode: "{{ item.mode | default('0644') }}"
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}"
+      when: (item.state | default('present')) == 'present'
+      notify: Reload the user manager
+
+    - name: The withdrawn units are removed
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}"
+        state: absent
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}"
+      when: (item.state | default('present')) == 'absent'
+      notify: Reload the user manager
+
+    # The generated units exist only after a reload, and the handler runs at the
+    # end of the play: flush it before the read-back, not after.
+    - name: The user manager is reloaded before the read-back
+      ansible.builtin.meta: flush_handlers
+
+    - name: The generated units are read back
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        argv:
+          - systemctl
+          - --user
+          - cat
+          - "{{ item.name }}{{ quadlet_suffixes[item.type] }}.service"
+      become: true
+      become_user: "{{ quadlet_user }}"
+      environment:
+        HOME: "{{ quadlet_home }}"
+        USER: "{{ quadlet_user }}"
+        LOGNAME: "{{ quadlet_user }}"
+        XDG_RUNTIME_DIR: "/run/user/{{ quadlet_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ quadlet_uid }}/bus"
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}"
+      register: quadlet_unit_readback
+      changed_when: false
+      failed_when: false
+      when:
+        - quadlet_verify | bool
+        - not ansible_check_mode
+        - (item.state | default('present')) == 'present'
+
+    - name: The user manager knows every declared unit
+      ansible.builtin.assert:
+        that:
+          - >-
+            quadlet_unit_readback.results | default([])
+            | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)
+            | list | length == 0
+        fail_msg: >-
+          A declared unit is not generated: check that the file is a valid
+          Quadlet declaration and that the account's user manager runs.
+        quiet: true
+      when:
+        - quadlet_verify | bool
+        - not ansible_check_mode

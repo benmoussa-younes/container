@@ -1,0 +1,31 @@
+# {{ ansible_managed }}
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# The product's hardening defaults for every container unit of this account.
+# Quadlet merges `container.d/*.conf` into every `.container` file; a unit's own
+# drop-in (`<name>.container.d/`) is merged after this one and wins. Relax one
+# key by adding that drop-in beside the unit, not by editing this file.
+#
+# `ReadOnly` + `ReadOnlyTmpfs` need an image that writes nothing outside its
+# tmpfs; the product's base image is built that way.
+#
+# No `Umask=` here: Debian 13 ships Podman 5.4.2, whose Quadlet refuses the key
+# and drops the whole unit (measured 2026-11-18). The value is set in
+# `containers.conf` (`umask`) instead.
+[Container]
+NoNewPrivileges=true
+DropCapability=all
+ReadOnly=true
+ReadOnlyTmpfs=true
+RunInit=true
+PidsLimit={{ quadlet_hardened_pids_limit }}
+Ulimit={{ quadlet_hardened_ulimit }}
+LogDriver=journald
+StopTimeout=20
+
+[Service]
+Restart=on-failure
+# `podman run` exits 143 when systemd stops it with SIGTERM; without this the
+# unit is reported failed after a clean stop (measured 2026-11-18).
+SuccessExitStatus=143
+TimeoutStartSec=900

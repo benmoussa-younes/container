@@ -1,0 +1,7 @@
+tools/scripts/binaries/gate.scs shebang
+tools/scripts/binaries/release.scs shebang
+tools/scripts/binaries/verify-release.scs shebang
+tools/scripts/modules/repo.scs shebang
+tools/scripts/modules/secrets.scs shebang
+tools/scripts/modules/verdict.scs shebang
+LICENSES/CC-BY-SA-4.0.txt no-smart-quotes

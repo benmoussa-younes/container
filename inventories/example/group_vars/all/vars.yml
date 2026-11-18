@@ -1,0 +1,11 @@
+---
+# The vault is the only place a secret lives. This file maps its `vault_*`
+# names onto the names a unit file reads, so no declaration names a vault
+# variable directly.
+#
+# Create the encrypted file from `vault.yml.example` in this directory (see
+# `README.md`). The vault password stays outside the tree.
+#
+# No entry is required by the product: it stores no secret. Uncomment the pair
+# when a site's unit file needs one.
+# container_example_password: "{{ vault_container_example_password }}"

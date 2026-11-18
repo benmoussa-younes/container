@@ -1,0 +1,74 @@
+---
+argument_specs:
+  main:
+    short_description: The site's rootless Quadlet declarations.
+    description:
+      - >-
+        Writes Quadlet unit files into one rootless account's generator
+        directory, reloads that account's user manager and reads every declared
+        unit back through `systemctl --user cat`. It creates no image, volume,
+        network, pod or container, and it never touches the rootful
+        `/etc/containers/systemd` directory.
+    author: Younes BENMOUSSA
+    options:
+      quadlet_enabled:
+        type: bool
+        required: false
+        description: Whether the declarations are selected. False writes nothing.
+      quadlet_user:
+        type: str
+        required: false
+        description: The existing non-root account that owns the units.
+      quadlet_units:
+        type: list
+        elements: dict
+        required: false
+        description: >-
+          One entry per unit file, with `name` (stem), `type` (container,
+          volume, network, pod, image, build or kube), `state` (present or
+          absent), `content` (the unit file, required when present) and an
+          optional `mode`.
+      quadlet_directory:
+        type: str
+        required: false
+        description: The rootless generator directory of the owning account.
+      quadlet_reload:
+        type: bool
+        required: false
+        description: Whether the user manager is reloaded after a change.
+      quadlet_verify:
+        type: bool
+        required: false
+        description: Whether every declared unit is read back after the reload.
+      quadlet_hardened_defaults:
+        type: bool
+        required: false
+        description: >-
+          Whether the product's global hardening drop-in is written for every
+          container unit of the account (`NoNewPrivileges`, all capabilities
+          dropped, read-only rootfs, init, pids and ulimit bounds, journald
+          logs). A unit's own drop-in still wins.
+      quadlet_hardened_pids_limit:
+        type: int
+        required: false
+        description: The pids limit the hardening drop-in declares.
+      quadlet_hardened_ulimit:
+        type: str
+        required: false
+        description: The ulimit the hardening drop-in declares.
+      quadlet_forbidden:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Lines a declared container unit may not carry while the hardened
+          defaults are on. Empty it to let a site declare any key.
+      quadlet_suffixes:
+        type: dict
+        required: false
+        description: The generated unit suffix of each declaration type.
+      quadlet_types:
+        type: list
+        elements: str
+        required: false
+        description: The declaration types this role accepts.

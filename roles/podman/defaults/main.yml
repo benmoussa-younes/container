@@ -1,0 +1,52 @@
+---
+# The rootless Podman engine.
+#
+# This role installs and configures the engine, never a container: a service a
+# site runs is the site's, not the base machine's. The human account owns the
+# rootless engine; the rootful socket is not enabled.
+podman_enabled: false
+
+# The account that owns the rootless engine. It defaults to the product's human
+# account; a site may name another existing account.
+podman_user: "{{ accounts_human.name | default('') }}"
+
+podman_packages:
+  - podman
+  - crun             # the runtime the engine settings name
+  - slirp4netns
+  - fuse-overlayfs
+  - uidmap
+  - passt
+
+# The registries an unqualified image name searches.
+podman_registries:
+  - docker.io
+
+podman_registries_dir: /etc/containers/registries.conf.d
+podman_registries_file: "{{ podman_registries_dir }}/99-container-podman.conf"
+podman_containers_dir: /etc/containers/containers.conf.d
+podman_containers_file: "{{ podman_containers_dir }}/99-container-podman.conf"
+
+# The engine's own defaults, closer to the product than Debian's.
+#
+# `no_new_privileges` is false in `containers.conf`, `log_size_max` is -1
+# (unbounded) and `pids_limit` is 1024: a single container can then spawn a
+# fork bomb no one bounds and fill the disk with its log. The product bounds all
+# three for every container, unit or not. `umask` is the container's file mode.
+podman_no_new_privileges: true
+podman_pids_limit: 512
+podman_log_size_max: 10485760
+podman_umask: "0077"
+podman_runtime: crun
+
+# The user socket and the user manager that keeps it alive without a login.
+podman_socket_enabled: true
+podman_linger: true
+
+# The subordinate ID range declared in /etc/subuid and /etc/subgid. The range
+# must not overlap another account; a collision is a hard failure.
+podman_subuid_start: 100000
+podman_subuid_count: 65536
+
+# The verification runs `podman info` as the owning account.
+podman_verify: true

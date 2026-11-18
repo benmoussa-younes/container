@@ -1,0 +1,64 @@
+---
+namespace: benmoussa
+name: container
+version: "0.1.0"
+readme: README.md
+authors:
+  - Younes BENMOUSSA <younes.benmoussa@pm.me>
+description: >-
+  Generic rootless Podman engine, Quadlet declarations and a minimal Debian base
+  image. No port, volume, network or secret is part of the product; a site
+  declares its units.
+license:
+  - AGPL-3.0-or-later
+  - CC-BY-SA-4.0
+tags:
+  - podman
+  - containers
+  - quadlet
+  - rootless
+  - systemd
+dependencies: {}
+homepage: https://github.com/benmoussa-younes/container
+repository: https://github.com/benmoussa-younes/container
+issues: https://github.com/benmoussa-younes/container/issues
+documentation: https://github.com/benmoussa-younes/container#readme
+build_ignore:
+  - .git
+  - .git/**
+  - .github
+  - .github/**
+  - .ansible
+  - .ansible/**
+  - dist
+  - dist/**
+  - artifacts
+  - artifacts/**
+  - inventories
+  - inventories/**
+  - tools
+  - tools/**
+  - tests
+  - tests/**
+  - .opencode
+  - .opencode/**
+  - .vscode
+  - .vscode/**
+  - .agents
+  - .agents/**
+  - .idea
+  - .idea/**
+  - docs
+  - docs/**
+  - AGENTS.md
+  - "**/AGENTS.md"
+  - CONTRIBUTING.md
+  - SECURITY.md
+  - .gitignore
+  - .gitattributes
+  - .yamllint
+  - .ansible-lint
+  - ansible.cfg
+  - requirements.yml
+  - "*.tar.gz"
+  - "*.retry"

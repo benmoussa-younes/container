@@ -1,0 +1,18 @@
+---
+# The container machine's desired state: a rootless Podman engine and the
+# Quadlet declarations the site owns.
+#
+# No container image, port, volume, network or secret is part of this product.
+# `roles/podman` configures the engine; `roles/quadlet` writes the site's unit
+# files and reads them back. Both are opt-in: an empty `quadlet_units` writes
+# nothing.
+- name: The rootless container engine
+  hosts: "{{ target | default('all') }}"
+  become: true
+  roles:
+    - role: podman
+      tags: [podman]
+    # The declarations come after the engine: the owning account and its linger
+    # must exist before a generated user unit can start.
+    - role: quadlet
+      tags: [quadlet]

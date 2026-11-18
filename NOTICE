@@ -1,0 +1,33 @@
+# NOTICE
+
+Container is composed of several works under different licences. The SPDX
+mapping is in `REUSE.toml`; the full texts are in `LICENSES/`.
+
+## The product code
+
+Copyright 2026 Younes BENMOUSSA <younes.benmoussa@pm.me>.
+Licensed under the GNU Affero General Public License, version 3 or later
+(`AGPL-3.0-or-later`). See `LICENSE` and
+`LICENSES/AGPL-3.0-or-later.txt`.
+
+## The documentation
+
+Copyright 2026 Younes BENMOUSSA <younes.benmoussa@pm.me>.
+Licensed under Creative Commons Attribution-ShareAlike 4.0 International
+(`CC-BY-SA-4.0`). See `LICENSES/CC-BY-SA-4.0.txt`.
+
+## Ansible and Debian
+
+Ansible is a separate work, installed by the controller. Debian is a separate
+distribution, installed on the target. Neither is redistributed by this
+collection. The product uses only `ansible.builtin`; `requirements.yml`
+declares no external collection.
+
+The base image `images/base/Containerfile` is built from the Debian minimal
+image and Debian packages. Those packages stay under their own licences; the
+product neither redistributes modified copies nor relicenses them.
+
+The image installs the Scripts interpreter from its public GitHub release
+(`scripts_0.1.2_amd64.deb`, verified against the release `SHA256SUMS`). Scripts
+is a separate work under the GPL-3.0-or-later; the image neither redistributes
+it as a product nor relicenses it.

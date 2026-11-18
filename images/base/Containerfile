@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: 2026 Younes BENMOUSSA <younes.benmoussa@pm.me>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Container Edition — the base image.
+#
+#   podman build -t localhost/benmoussa/container:0.1.0 images/base
+#
+# The base is Debian's minimal one, pinned by digest for reproducibility. The
+# image carries what a workload needs and nothing else: TLS roots, the zone
+# data `Timezone=` reads, `curl` for healthchecks, `procps` for a shell inside a
+# running container, and the Scripts interpreter the site's scripts run on. No
+# sshd, no sudo, no compiler, no package lists.
+#
+# Scripts is a separate work under the GPL-3.0-or-later; the release package is
+# verified against the release's own SHA256SUMS before it is installed, and the
+# version is pinned here.
+FROM docker.io/library/debian:13-slim@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392
+
+LABEL org.opencontainers.image.title="Container Edition" \
+      org.opencontainers.image.description="Debian minimal base for the site's containers: TLS roots, tzdata, curl, procps, a non-root account and no setuid" \
+      org.opencontainers.image.vendor="Younes BENMOUSSA" \
+      org.opencontainers.image.version="0.1.0" \
+      org.opencontainers.image.base.name="docker.io/library/debian:13-slim" \
+      org.opencontainers.image.base.digest="sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392"
+
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
+# One layer: install, brand and clean in the same step, so the package lists
+# never reach a layer of their own.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      tzdata \
+      curl \
+      procps \
+ && curl -fsSL -o /tmp/scripts.deb \
+      https://github.com/benmoussa-younes/scripts/releases/download/v0.1.2/scripts_0.1.2_amd64.deb \
+ && echo "1170748df0d104cd3dbc36bbfa0f9779649eb6039585c452bf562f03cb86f977  /tmp/scripts.deb" \
+      | sha256sum -c - \
+ && apt-get install -y --no-install-recommends /tmp/scripts.deb \
+ && rm -f /tmp/scripts.deb \
+ && rm -rf /var/lib/apt/lists/* \
+ && /usr/bin/scripts --version \
+ && printf '%s\n' \
+      'PRETTY_NAME="Container Edition 0.1.0"' \
+      'NAME="Container Edition"' \
+      'ID=debian' \
+      'VERSION_ID="0.1.0"' \
+      'VERSION_CODENAME=trixie' \
+      'HOME_URL="https://github.com/benmoussa-younes/container"' \
+      > /etc/os-release \
+ && printf '%s\n' 'Container Edition 0.1.0' > /etc/container-edition
+
+# A setuid or setgid bit is useless once every capability is dropped, and it is
+# a known escalation vector with them. The run-time drop-in drops them all.
+RUN find / -xdev -perm /6000 -type f -exec chmod ug-s {} +
+
+# One non-root account, no login shell, a locked root: nothing to log in as.
+# `/work` is where a site mounts its content.
+RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin app \
+ && passwd -l root \
+ && mkdir -p /work \
+ && chown app:app /work
+
+USER 1000:1000
+WORKDIR /work

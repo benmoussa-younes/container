@@ -1,0 +1,18 @@
+version = 1
+SPDX-PackageName = "container"
+SPDX-PackageSupplier = "Younes BENMOUSSA <younes.benmoussa@pm.me>"
+SPDX-PackageDownloadLocation = "https://github.com/benmoussa-younes/container"
+
+# Default: the product's Ansible code and the repository tooling.
+[[annotations]]
+path = "**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Younes BENMOUSSA <younes.benmoussa@pm.me>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# Documentation is content, licensed separately from the code.
+[[annotations]]
+path = ["README.md", "AGENTS.md", "NOTICE", "**/*.md", "CHANGELOG.md"]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Younes BENMOUSSA <younes.benmoussa@pm.me>"
+SPDX-License-Identifier = "CC-BY-SA-4.0"

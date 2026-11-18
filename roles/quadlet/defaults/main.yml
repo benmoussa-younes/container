@@ -1,0 +1,72 @@
+---
+# The site's Quadlet declarations for one rootless account.
+#
+# Quadlet is the systemd generator that turns `*.container`, `*.volume`,
+# `*.network`, `*.pod`, `*.image`, `*.build` and `*.kube` files into user units.
+# This role writes those declarations and reloads the user manager. It never
+# creates an image, a volume, a network or a secret: the definition belongs to
+# the site that runs it.
+quadlet_enabled: false
+
+# The account that owns the units. Rootless only: the rootful generator reads
+# `/etc/containers/systemd` and is a different decision, deliberately not taken.
+# Set it explicitly, or let it follow the `podman` role's account.
+quadlet_user: "{{ podman_user | default('') }}"
+
+# One entry per declaration:
+#
+#   name:    the file stem, without the suffix (`web`, not `web.container`)
+#   type:    container | volume | network | pod | image | build | kube
+#   state:   present | absent (default present)
+#   content: the unit file as a string, required when the state is present
+#   mode:    the file mode (default 0644)
+quadlet_units: []
+
+# Where the rootless generator reads its declarations.
+quadlet_directory: "{{ quadlet_home }}/.config/containers/systemd"
+
+# The user manager is reloaded after a change, so the generated units exist.
+quadlet_reload: true
+
+# The product's hardening defaults, applied to every container unit of the
+# account through Quadlet's global drop-in `container.d/10-container-edition.conf`.
+# Quadlet merges `container.d/*.conf` into every `.container` file, and a unit's
+# own drop-in (`<name>.container.d/`) wins over this one: a site that must relax
+# one key adds a drop-in beside that unit rather than editing here.
+quadlet_hardened_defaults: true
+quadlet_hardened_pids_limit: 512
+quadlet_hardened_ulimit: "nofile=1024:4096"
+
+# Keys a declared container unit may not carry while the hardened defaults are
+# on: each one either disables a property the product sets or reopens a door the
+# product closed. A site that needs one empties this list deliberately.
+quadlet_forbidden:
+  - Network=host
+  - SecurityLabelDisable=true
+  - User=0
+  - User=0:0
+  - NoNewPrivileges=false
+  - ReadOnly=false
+
+# Every present declaration is read back through `systemctl --user cat`.
+quadlet_verify: true
+
+# The unit name Quadlet generates for each declaration type. Documented in
+# `podman-system-generator(1)`; the role reads it back rather than assuming it.
+quadlet_suffixes:
+  container: ""
+  volume: "-volume"
+  network: "-network"
+  pod: "-pod"
+  image: "-image"
+  build: "-build"
+  kube: "-kube"
+
+quadlet_types:
+  - container
+  - volume
+  - network
+  - pod
+  - image
+  - build
+  - kube
