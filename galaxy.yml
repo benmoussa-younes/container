@@ -13,6 +13,7 @@ license:
   - AGPL-3.0-or-later
   - CC-BY-SA-4.0
 tags:
+  - infrastructure
   - podman
   - containers
   - quadlet
