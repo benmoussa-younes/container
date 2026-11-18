@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-19
+
+### Fixed
+
+- `quadlet`: the account's home is a lazy variable with an empty default, so the
+  role's argument validation no longer resolves `quadlet_home` before the passwd
+  record is read (measured on `container-01-testing`).
+- `podman`: the engine declares `kernel.unprivileged_userns_clone=1` in
+  `62-podman-userns.conf`, loads it after a hardening file that disables the
+  setting, reads it back, and removes it when the engine is not declared.
+
 ## [0.1.0] - 2026-11-18
 
 ### Added

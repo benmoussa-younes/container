@@ -22,6 +22,12 @@ podman_packages:
 podman_registries:
   - docker.io
 
+# Rootless Podman clones an unprivileged user namespace for every container, and
+# a hardened host disables them (`60-hardening.conf` in the Server collection).
+# This drop-in loads after that file and re-enables the setting on a host that
+# declares the engine; the role removes it when the engine is not declared.
+podman_userns_sysctl: /etc/sysctl.d/62-podman-userns.conf
+
 podman_registries_dir: /etc/containers/registries.conf.d
 podman_registries_file: "{{ podman_registries_dir }}/99-container-podman.conf"
 podman_containers_dir: /etc/containers/containers.conf.d

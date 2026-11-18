@@ -22,6 +22,11 @@ quadlet_user: "{{ podman_user | default('') }}"
 #   mode:    the file mode (default 0644)
 quadlet_units: []
 
+# The account's home is read from the passwd record at role start (see the
+# tasks). The empty default keeps argument validation from resolving a fact that
+# does not exist yet; `quadlet_directory` re-evaluates once the fact is set.
+quadlet_home: ""
+
 # Where the rootless generator reads its declarations.
 quadlet_directory: "{{ quadlet_home }}/.config/containers/systemd"
 
