@@ -1,5 +1,10 @@
 # AGENTS.md — Container
 
+Ansible roles that install a rootless Podman engine on a Debian host, write the
+site's Quadlet declarations and ship the Container Edition base image. The
+product owns the engine, the generator's input and the base; a port, a volume, a
+network and a secret remain the site's.
+
 ## Build and test
 
 ```sh
@@ -10,30 +15,56 @@ scripts check tools/scripts/binaries/gate.scs
 scripts run tools/scripts/binaries/gate.scs      # one VERDICT line, exit 0/1
 ```
 
-The gate is the repository's single entry point. It checks the tree, the
-version, the licences, the collection archive and the legacy names. It does not
-change tracked files.
+The gate is the repository's single entry point: the tree, the version, the
+licences, the collection archive and the secret shapes, then the linters and the
+playbooks' syntax. It does not change tracked files.
+
+The base image is not built by the gate:
+
+```sh
+podman build -t localhost/benmoussa/container:0.1.0 images/base
+```
+
+## Conventions
+
+- Rootless only: one existing non-root account owns the engine; the rootful
+  socket is never enabled and `/etc/containers/systemd` is never written.
+- Only `ansible.builtin` is used; `requirements.yml` declares no collection.
+- A role keeps its `meta/argument_specs.yml` contract and its idempotence, and
+  reads its own change back (the Quadlet role reads every generated unit).
+- No site definition in the product: an image name, a port, a volume or a
+  secret belongs in the site inventory.
+- Debian 13 ships Podman 5.4.2: a Quadlet key it does not know (`Umask=`) drops
+  the whole unit. Check a new key against the installed version before using it.
 
 ## Repository facts
 
 - The collection is `benmoussa.container`, version `0.1.0`.
 - The product code is `AGPL-3.0-or-later`; the documentation is
-  `CC-BY-SA-4.0`.
-- Only `ansible.builtin` is used; `requirements.yml` declares no collection.
-- There is no `docs/` and no `.opencode/`: the plan and the board live outside
-  the repository.
+  `CC-BY-SA-4.0`. The base image's Debian packages keep their own licences.
 - A release is a signed tag `v<version>` and three assets: the collection
   tarball, the source tarball and `SHA256SUMS`.
-- The engine is rootless only. The rootful socket is never enabled, and
-  `/etc/containers/systemd` is never written.
-- The product ships one image, the base `images/base/Containerfile`, and no
-  definition: a site owns its ports, volumes, networks and secrets.
+- `roles/README.md` is the role catalog; `images/base/Containerfile` is the
+  image the site's containers start from.
+
+## Commits and releases
+
+- One branch per task, `work/<slug>`; one concern per commit; English,
+  imperative subject; the body says why.
+- Commits and tags are GPG-signed. The maintainer merges a green `check`
+  locally; publishing (push, tag, release) is the owner's act.
+
+## Security
+
+- The engine's defaults are the product's: no new privileges, bounded pids and
+  log size, umask, the `crun` runtime; the Quadlet role adds the hardening
+  drop-in and refuses a unit that relaxes it.
+- The base image carries a locked root, one non-root account, no setuid bit and
+  no package list; the Scripts interpreter is verified against its release
+  `SHA256SUMS`.
+- No secret in a tracked file; the site keeps its credentials in its vault.
+- A vulnerability report is private: follow `SECURITY.md`.
 
 ## Maintenance
 
 - Keep `VERSION`, `galaxy.yml` and `CHANGELOG.md` on the same version.
-- A role keeps its `meta/argument_specs.yml` contract and its idempotence.
-- No site data in a role: an address, a host name, a registry credential or a
-  secret belongs in the site inventory.
-- `quadlet` reads every declared unit back with `systemctl --user cat`; a
-  declaration the generator ignores is a failure, not a warning.
