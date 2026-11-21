@@ -96,8 +96,9 @@
         - "{{ podman_containers_dir }}"
 
     # Tagged (here and on the task in `stale.yml`, because a tag on an include
-    # is not inherited) so a site can run `--tags registries` on a fixture
-    # before the engine is installed.
+    # is not inherited) so a fixture can reach the removal with
+    # `--tags registries --check`. A real tag-only run is not supported: the
+    # notified handler needs the account facts that the full role gathers.
     - name: The drop-ins the retired edition roles wrote are removed
       ansible.builtin.include_tasks: stale.yml
       tags: [registries]
