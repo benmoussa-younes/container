@@ -174,7 +174,7 @@ function lines_outside_directory(lines: list<string>, directory: string) -> list
     return outside
 }
 
-# A2: one owner of `/etc/containers/*.conf.d/99-*-podman.conf`. The product
+# One owner of `/etc/containers/*.conf.d/99-*-podman.conf`. The product
 # writes `99-container-podman.conf` from `roles/podman/`, and the retired
 # `99-podman.conf` survives only as a removal target. Untracked files count:
 # one is still a second writer on the machine that runs the role.
@@ -200,8 +200,8 @@ function check_registries_owner(root: path) -> list<string> {
     for problem in note(code_lines(legacy).length() > 0, "retired drop-in removed", "no tracked file names `99-podman.conf`, so nothing removes the drop-in the edition roles wrote") {
         result.append(problem)
     }
-    # `publication-roadmap.md` asks for one `99-*podman*` file, not for one
-    # spelling of it: any other name of that shape is a second writer.
+    # The product promises one `99-*podman*` file, not one spelling of it:
+    # any other name of that shape is a second writer.
     let dropins = git_grep_regex(root, "99-[A-Za-z0-9_-]*podman[.]conf", code_paths)
     for problem in note(lines_outside_file(dropins, owner).length() == 0, "one podman drop-in name", lines_outside_file(dropins, owner).join("; ")) {
         result.append(problem)

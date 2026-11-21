@@ -27,10 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The base image keeps Debian's own `/etc/os-release` and no longer writes a
   `PRETTY_NAME`, a version of its own or `/etc/container-edition`: the
   collection is a capability and owns no identity, in an image or on a host.
-- The collection version is `0.2.0`. The `0.3.0` invariants written in
-  `publication-roadmap.md` (images by digest, `storage.conf.d`, the auto-update
-  timer, a service account, no TCP socket) are not implemented yet, so the
-  collection does not claim that number.
+- The collection version is `0.2.0`. The invariants a `0.3.0` would carry —
+  images pinned by digest, `storage.conf.d`, the auto-update timer, a service
+  account, no TCP socket — are not implemented yet, so this release does not
+  claim them.
 
 ### Fixed
 
