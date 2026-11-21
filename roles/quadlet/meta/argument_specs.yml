@@ -28,6 +28,12 @@ argument_specs:
           volume, network, pod, image, build or kube), `state` (present or
           absent), `content` (the unit file, required when present) and an
           optional `mode`.
+      quadlet_home:
+        type: str
+        required: false
+        description: >-
+          The owning account's home, read from its passwd record. Empty means
+          the role resolves it; `quadlet_directory` derives from it.
       quadlet_directory:
         type: str
         required: false

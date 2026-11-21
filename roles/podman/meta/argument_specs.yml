@@ -93,6 +93,12 @@ argument_specs:
         type: bool
         required: false
         description: Whether the user manager runs without an active login.
+      podman_userns_sysctl:
+        type: str
+        required: false
+        description: >-
+          The drop-in that re-enables unprivileged user namespaces for a host
+          that declares the engine. It loads after the edition's hardening file.
       podman_subuid_start:
         type: int
         required: false
