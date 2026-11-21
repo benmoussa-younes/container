@@ -210,10 +210,12 @@ function check_registries_owner(root: path) -> list<string> {
     for problem in note(lines_outside_file(directories, owner).length() == 0, "registries directory owner", lines_outside_file(directories, owner).join("; ")) {
         result.append(problem)
     }
-    # A writer may name the engine's file variable instead of the path.
-    for variable in ["podman_registries_file", "podman_containers_file"] {
+    # A writer may name one of the engine's variables instead of the path: the
+    # directory ones too, because a second file under the same directory is the
+    # collision this check exists for.
+    for variable in ["podman_registries_dir", "podman_registries_file", "podman_containers_dir", "podman_containers_file"] {
         let lines = git_grep_literal(root, variable, code_paths)
-        for problem in note(lines_outside_directory(lines, engine_dir).length() == 0, "engine file variable owner", lines_outside_directory(lines, engine_dir).join("; ")) {
+        for problem in note(lines_outside_directory(lines, engine_dir).length() == 0, "engine configuration variable owner", lines_outside_directory(lines, engine_dir).join("; ")) {
             result.append(problem)
         }
     }
