@@ -36,6 +36,21 @@ argument_specs:
         type: bool
         required: false
         description: Whether the user manager is reloaded after a change.
+      quadlet_default_memory:
+        type: str
+        required: false
+        description: >-
+          The `MemoryMax=` value every container unit gets unless it declares
+          its own, in systemd's units (`128M`). Empty writes no default. The
+          role writes a per-unit drop-in only while the unit declares no
+          `MemoryMax=`, because a drop-in wins over the unit file.
+      quadlet_default_cpu_quota:
+        type: str
+        required: false
+        description: >-
+          The `CPUQuota=` value every container unit gets unless it declares
+          its own (`50%`, where 100% is one thread). Empty writes no default,
+          with the same drop-in rule as `quadlet_default_memory`.
       quadlet_verify:
         type: bool
         required: false

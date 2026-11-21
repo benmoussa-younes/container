@@ -129,6 +129,68 @@
       when: (item.state | default('present')) == 'present'
       notify: Reload the user manager
 
+    # The default bounds are a site budget, not a hardening key: they are
+    # written per unit, and only while the unit declares no such key, because a
+    # Quadlet drop-in overrides the unit file.
+    # Both keys are always compiled, with an empty value meaning "no default":
+    # that is what lets an emptied default remove the drop-in it wrote before.
+    - name: The default bounds are compiled once
+      ansible.builtin.set_fact:
+        quadlet_default_bounds:
+          - { key: MemoryMax, value: "{{ quadlet_default_memory }}", file: 50-default-memory.conf }
+          - { key: CPUQuota, value: "{{ quadlet_default_cpu_quota }}", file: 51-default-cpu.conf }
+
+    - name: The directories of the default bounds exist
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}/{{ item.0.name }}.container.d"
+        state: directory
+        owner: "{{ quadlet_user }}"
+        group: "{{ quadlet_group }}"
+        mode: "0755"
+      loop: "{{ quadlet_units | product(quadlet_default_bounds) | list }}"
+      loop_control:
+        label: "{{ item.0.name }}.{{ item.1.file }}"
+      when:
+        - (item.0.type | default('')) == 'container'
+        - (item.0.state | default('present')) == 'present'
+        - item.1.value | length > 0
+        - (item.0.content | default('')) is not search('(?m)^' ~ (item.1.key | regex_escape) ~ '=')
+
+    - name: The default bounds are written where the unit declares none
+      ansible.builtin.copy:
+        content: |
+          # Managed by Ansible: the site's default bound. The unit declares no
+          # {{ item.1.key }}=, so this drop-in is what gives it one. Declaring
+          # the key in the unit removes this file, and the unit wins.
+          [Service]
+          {{ item.1.key }}={{ item.1.value }}
+        dest: "{{ quadlet_directory }}/{{ item.0.name }}.container.d/{{ item.1.file }}"
+        owner: "{{ quadlet_user }}"
+        group: "{{ quadlet_group }}"
+        mode: "0644"
+      loop: "{{ quadlet_units | product(quadlet_default_bounds) | list }}"
+      loop_control:
+        label: "{{ item.0.name }}.{{ item.1.file }}"
+      when:
+        - (item.0.type | default('')) == 'container'
+        - (item.0.state | default('present')) == 'present'
+        - item.1.value | length > 0
+        - (item.0.content | default('')) is not search('(?m)^' ~ (item.1.key | regex_escape) ~ '=')
+      notify: Reload the user manager
+
+    - name: A bound the unit declares itself is not shadowed
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}/{{ item.0.name }}.container.d/{{ item.1.file }}"
+        state: absent
+      loop: "{{ quadlet_units | product(quadlet_default_bounds) | list }}"
+      loop_control:
+        label: "{{ item.0.name }}.{{ item.1.file }}"
+      when: >-
+        (item.0.type | default('')) == 'container'
+        and ((item.0.content | default('')) is search('(?m)^' ~ (item.1.key | regex_escape) ~ '=')
+             or item.1.value | length == 0)
+      notify: Reload the user manager
+
     - name: The withdrawn units are removed
       ansible.builtin.file:
         path: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}"

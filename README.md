@@ -124,6 +124,19 @@ ansible-playbook -i inventories/site/hosts.yml \
 The playbook targets `all`; use `--limit` when the inventory holds more than the
 hosts this product owns.
 
+### Default bounds
+
+`quadlet_default_memory` and `quadlet_default_cpu_quota` give every container
+unit a bound it does not declare itself (`MemoryMax=256M`, `CPUQuota=40%`). They
+are written as a per-unit drop-in, and only while the unit omits the key: a
+Quadlet drop-in wins over the unit file, so writing one beside a declared value
+would invert the site's intent. Declaring the key in the unit removes the
+drop-in; emptying a default removes it everywhere.
+
+`Memory=` (the older systemd spelling) is not used: systemd 257 ignores it in a
+`[Service]` section, and a unit that carried only `Memory=` ran unbounded
+(measured: `MemoryMax=infinity`, 143 MB consumed).
+
 ## The base image
 
 `images/base/Containerfile` is the image the site's containers start from: the

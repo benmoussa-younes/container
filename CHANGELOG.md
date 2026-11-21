@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before writing its own `99-container-podman.conf`, so exactly one file owns
   each configuration. `podman_stale_config_files` follows the two directories,
   and the removal restarts the user socket like any other engine change.
+- `quadlet`: `quadlet_default_memory` and `quadlet_default_cpu_quota` give every
+  container unit a `MemoryMax=` and a `CPUQuota=` unless it declares its own.
+  The role writes a per-unit drop-in only while the unit omits the key (a
+  Quadlet drop-in wins over the unit file), and removes it as soon as the unit
+  declares the key or the default is emptied.
 - The gate's `one registries writer` check: only `roles/podman/defaults/main.yml`
   may name a registries drop-in, and the retired name survives only as the
   removal target.
