@@ -14,3 +14,8 @@
   loop_control:
     label: "{{ item }}"
   notify: Restart the rootless Podman socket
+  # The tag sits on the task and not only on the include: a tag on
+  # `include_tasks` is not inherited by the included tasks (measured on
+  # ansible-core 2.19.11), so `--tags registries` reached the include and ran
+  # nothing.
+  tags: [registries]
