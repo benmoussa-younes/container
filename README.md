@@ -1,6 +1,6 @@
-# Container Edition
+# Container
 
-[![Release](https://img.shields.io/badge/release-0.1.0-blue)](https://github.com/benmoussa-younes/container/releases/tag/v0.1.0)
+[![Release](https://img.shields.io/badge/release-0.2.0-blue)](https://github.com/benmoussa-younes/container/releases/tag/v0.2.0)
 [![Licence](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](LICENSE)
 [![CI](https://github.com/benmoussa-younes/container/actions/workflows/ci.yml/badge.svg)](https://github.com/benmoussa-younes/container/actions/workflows/ci.yml)
 
@@ -10,8 +10,11 @@ declarations run on. The product owns the engine, the generator's input and the
 base; the definitions themselves — ports, volumes, networks, secrets — remain
 the site's.
 
-It is the container counterpart of the Server and Workstation collections, and
-it is shipped as the collection `benmoussa.container`.
+It installs on a host that already carries an edition — Server Edition or
+Workstation Edition — and it **owns no identity**: no `os-release` of its own,
+no login banner, no boot splash, no version line of its own. The edition says
+what the machine is; this collection says what it runs. It is shipped as the
+collection `benmoussa.container`.
 
 ## What it does
 
@@ -22,6 +25,13 @@ it is shipped as the collection `benmoussa.container`.
   the log size unbounded and the pids limit at 1024. The product turns the
   first on, bounds the other two, sets `umask` 0077 and names the `crun`
   runtime.
+- **One writer per file**: the engine writes `99-container-podman.conf` and
+  removes the `99-podman.conf` the retired edition roles left under the same
+  directories, so the lexical order of `99-*.conf` can no longer make an old
+  file win.
+- **An edition it reads, never writes**: `container_host_edition` names the
+  edition the host already carries (`server` today). Applying the engine role
+  without it, or with another value, fails the run instead of guessing.
 - **The site's Quadlet declarations**: `container`, `volume`, `network`, `pod`,
   `image`, `build` and `kube` files in the owning account's generator
   directory, a user-manager reload and a read-back of every generated unit.
@@ -34,13 +44,14 @@ it is shipped as the collection `benmoussa.container`.
   `SecurityLabelDisable=true` fails the run while the hardened defaults are on.
 - **A base image**: the Debian minimal base pinned by digest, TLS roots,
   `tzdata`, `curl`, `procps` and the Scripts interpreter, one non-root
-  account, a locked root, no setuid bit and a branded os-release.
+  account, a locked root and no setuid bit. The image keeps Debian's own
+  `/etc/os-release`; the collection writes no identity, in an image or on a
+  host.
 
 ## Requirements
 
-- a target running **Debian**; the supported release is named in the Server
-  collection's identity distribution table, and the engine packages come from
-  the distribution;
+- a target running **Debian 13** (`trixie`), the release both editions support
+  today, with the engine packages taken from the distribution;
 - `ansible-core` **2.19 or later** on the controller, with SSH access to the
   target;
 - an existing human account that will own the rootless engine; the product
@@ -59,17 +70,17 @@ collection.
 From the release tarball (the collection is published on GitHub, not Galaxy):
 
 ```sh
-ansible-galaxy collection install benmoussa-container-0.1.0.tar.gz
+ansible-galaxy collection install benmoussa-container-0.2.0.tar.gz
 ```
 
 Or, from the signed tag:
 
 ```sh
 ansible-galaxy collection install \
-  git+https://github.com/benmoussa-younes/container.git,v0.1.0
+  git+https://github.com/benmoussa-younes/container.git,v0.2.0
 ```
 
-The release also carries `container-0.1.0-src.tar.gz` (the source tree with the
+The release also carries `container-0.2.0-src.tar.gz` (the source tree with the
 example inventory and the repository tooling) and `SHA256SUMS`. Verify the
 checksums before installing:
 
@@ -89,7 +100,10 @@ all:
     ansible_python_interpreter: /usr/bin/python3
 
     # The engine. The account must already exist; `quadlet` follows it.
+    # `container_host_edition` is the edition the host already carries: the
+    # collection owns no identity and accepts `server` today.
     podman_enabled: true
+    container_host_edition: server
     podman_user: "{{ ansible_user }}"
     podman_registries: [docker.io]
 
@@ -109,6 +123,19 @@ ansible-playbook -i inventories/site/hosts.yml \
 
 The playbook targets `all`; use `--limit` when the inventory holds more than the
 hosts this product owns.
+
+### Default bounds
+
+`quadlet_default_memory` and `quadlet_default_cpu_quota` give every container
+unit a bound it does not declare itself (`MemoryMax=256M`, `CPUQuota=40%`). They
+are written as a per-unit drop-in, and only while the unit omits the key: a
+Quadlet drop-in wins over the unit file, so writing one beside a declared value
+would invert the site's intent. Declaring the key in the unit removes the
+drop-in; emptying a default removes it everywhere.
+
+`Memory=` (the older systemd spelling) is not used: systemd 257 ignores it in a
+`[Service]` section, and a unit that carried only `Memory=` ran unbounded
+(measured: `MemoryMax=infinity`, 143 MB consumed).
 
 ## The base image
 
@@ -203,11 +230,12 @@ defaults are on. Empty it deliberately if a site needs one.
 
 ## Project status
 
-`0.1.0` is the first release. Debian is the only supported base; a newer Debian
-release is added when the Server collection declares it. The product is
-maintained by one author; there is no support contract, service level or
-warranty, express or implied (see [`CONTRIBUTING.md`](CONTRIBUTING.md) and
-[`SECURITY.md`](SECURITY.md)).
+`0.2.0` removes the configuration the edition collections used to own and
+refuses an unsupported host edition; `0.1.0` was the first release. Debian is
+the only supported base; a newer Debian release is added when the Server
+collection declares it. The product is maintained by one author; there is no
+support contract, service level or warranty, express or implied (see
+[`CONTRIBUTING.md`](CONTRIBUTING.md) and [`SECURITY.md`](SECURITY.md)).
 
 ## Support
 

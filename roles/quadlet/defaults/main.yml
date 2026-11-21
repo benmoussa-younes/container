@@ -33,6 +33,15 @@ quadlet_directory: "{{ quadlet_home }}/.config/containers/systemd"
 # The user manager is reloaded after a change, so the generated units exist.
 quadlet_reload: true
 
+# The bounds every container unit gets unless it declares its own. Empty means
+# no default. A Quadlet drop-in wins over the unit file, so writing one next to
+# a declared value would invert the site's intent: the role writes the drop-in
+# only while the unit declares no such key, and removes it as soon as the unit
+# does. `Memory=` alone is ignored by systemd 257 (measured: MemoryMax stayed
+# infinity and the unit consumed 143 MB), hence `MemoryMax`.
+quadlet_default_memory: ''
+quadlet_default_cpu_quota: ''
+
 # The product's hardening defaults, applied to every container unit of the
 # account through Quadlet's global drop-in `container.d/10-container-edition.conf`.
 # Quadlet merges `container.d/*.conf` into every `.container` file, and a unit's

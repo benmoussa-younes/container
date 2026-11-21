@@ -1,9 +1,10 @@
 # AGENTS.md — Container
 
 Ansible roles that install a rootless Podman engine on a Debian host, write the
-site's Quadlet declarations and ship the Container Edition base image. The
-product owns the engine, the generator's input and the base; a port, a volume, a
-network and a secret remain the site's.
+site's Quadlet declarations and ship the base image. The product owns the
+engine, the generator's input and the base; a port, a volume, a network and a
+secret remain the site's. It is a capability, not an edition: it reads
+`container_host_edition` and owns no identity.
 
 ## Build and test
 
@@ -39,7 +40,7 @@ podman build -t localhost/benmoussa/container:0.1.0 images/base
 
 ## Repository facts
 
-- The collection is `benmoussa.container`, version `0.1.0`.
+- The collection is `benmoussa.container`, version `0.2.0`.
 - The product code is `AGPL-3.0-or-later`; the documentation is
   `CC-BY-SA-4.0`. The base image's Debian packages keep their own licences.
 - A release is a signed tag `v<version>` and three assets: the collection
