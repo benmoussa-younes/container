@@ -1,18 +1,23 @@
 ---
 # The rootless Podman engine. No container is created or started here.
+#
+# The edition guard sits outside the `podman_enabled` block on purpose:
+# applying this role to a host declares that the host carries a supported
+# edition, and a site that forgets the value must fail whether or not the
+# engine is selected.
+- name: The host edition this collection installs on is declared
+  ansible.builtin.assert:
+    that:
+      - container_host_edition | default('') | length > 0
+    fail_msg: >-
+      container_host_edition is not declared. benmoussa.container owns no
+      identity and installs on the edition the host already carries:
+      declare `container_host_edition: server` in the host's variables.
+    quiet: true
+
 - name: The rootless Podman engine is configured
   when: podman_enabled | bool
   block:
-    - name: The host edition this collection installs on is declared
-      ansible.builtin.assert:
-        that:
-          - container_host_edition | default('') | length > 0
-        fail_msg: >-
-          container_host_edition is not declared. benmoussa.container owns no
-          identity and installs on the edition the host already carries:
-          declare `container_host_edition: server` in the host's variables.
-        quiet: true
-
     - name: The owning account is declared
       ansible.builtin.assert:
         that:
@@ -90,15 +95,10 @@
         - "{{ podman_registries_dir }}"
         - "{{ podman_containers_dir }}"
 
-    # Tagged: the removal is the one step a fixture can apply without root, so
-    # a site proves it with `--tags registries` before the engine is installed.
-    - name: A drop-in the retired edition roles wrote is removed
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop: "{{ podman_stale_config_files }}"
-      loop_control:
-        label: "{{ item }}"
+    # Tagged so a site can prove the removal with `--tags registries` on a
+    # fixture, before the engine is installed.
+    - name: The drop-ins the retired edition roles wrote are removed
+      ansible.builtin.include_tasks: stale.yml
       tags: [registries]
 
     - name: The registry search path is declared
