@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timer, a service account, no TCP socket) are not implemented yet, so the
   collection does not claim that number.
 
+### Fixed
+
+- `podman`: `--check` no longer fails on a host where the user-namespace
+  drop-in is not applied yet. The read runs in check mode (it only reads) and
+  the assert is skipped there, because check mode cannot apply the sysctl it
+  asserts. Measured before: `ok=8 changed=1 failed=1`, "is , not 1".
+
 ### Migration
 
 - From `0.1.0`: declare `container_host_edition: server` in the host's
