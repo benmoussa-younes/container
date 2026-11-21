@@ -1,0 +1,21 @@
+---
+# The drop-ins the retired `server` and `workstation` roles wrote. Two writers
+# of one file means the last one wins, and `99-podman.conf` sorts after
+# `99-container-podman.conf`, so the old file would win: the engine removes
+# both before it writes its own.
+#
+# Kept in a file of its own so the gate can assert the `state` of this exact
+# task and a fixture can apply it without root.
+- name: A drop-in the retired edition roles wrote is removed
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ podman_stale_config_files }}"
+  loop_control:
+    label: "{{ item }}"
+  notify: Restart the rootless Podman socket
+  # The tag sits on the task and not only on the include: a tag on
+  # `include_tasks` is not inherited by the included tasks (measured on
+  # ansible-core 2.19.11), so `--tags registries` reached the include and ran
+  # nothing.
+  tags: [registries]

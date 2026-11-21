@@ -14,9 +14,9 @@ that promise and passes the gate.
 
 ## External contributions
 
-External contributions are **not accepted at this time**. Container Edition is maintained
-by the owner; unsolicited pull requests, patches and issues may be closed
-without review. This policy does not limit the rights the licences grant you:
+External contributions are **not accepted at this time**. The collection is
+maintained by the owner; unsolicited pull requests, patches and issues may be
+closed without review. This policy does not limit the rights the licences grant you:
 the source is free software, and you may fork it and modify it under the licence
 terms.
 

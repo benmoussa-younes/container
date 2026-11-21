@@ -5,7 +5,53 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-11-21
+
+### Added
+
+- `podman`: `container_host_edition` states the edition the host already
+  carries. The collection owns no identity: the argument spec accepts `server`
+  only and an unsupported value fails validation; applying the role without the
+  declaration fails its first task, whether or not the engine is selected.
+- `podman`: the role removes the `99-podman.conf` the retired `server` and
+  `workstation` roles wrote under `registries.conf.d` and `containers.conf.d`,
+  before writing its own `99-container-podman.conf`, so exactly one file owns
+  each configuration. `podman_stale_config_files` follows the two directories,
+  and the removal restarts the user socket like any other engine change.
+- `quadlet`: `quadlet_default_memory` and `quadlet_default_cpu_quota` give every
+  container unit a `MemoryMax=` and a `CPUQuota=` unless it declares its own.
+  The role writes a per-unit drop-in only while the unit omits the key (a
+  Quadlet drop-in wins over the unit file), and removes it as soon as the unit
+  declares the key or the default is emptied.
+- The gate's `one registries writer` check: only `roles/podman/defaults/main.yml`
+  may name a registries drop-in, and the retired name survives only as the
+  removal target.
+
+### Changed
+
+- The base image keeps Debian's own `/etc/os-release` and no longer writes a
+  `PRETTY_NAME`, a version of its own or `/etc/container-edition`: the
+  collection is a capability and owns no identity, in an image or on a host.
+- The collection version is `0.2.0`. The invariants a `0.3.0` would carry —
+  images pinned by digest, `storage.conf.d`, the auto-update timer, a service
+  account, no TCP socket — are not implemented yet, so this release does not
+  claim them.
+
+### Fixed
+
+- `podman`: `--check` no longer fails on a host where the user-namespace
+  drop-in is not applied yet. The read runs in check mode (it only reads) and
+  the assert is skipped there, because check mode cannot apply the sysctl it
+  asserts. Measured before: `ok=8 changed=1 failed=1`, "is , not 1".
+
+### Migration
+
+- From `0.1.0`: declare `container_host_edition: server` in the host's
+  variables. The engine role now refuses to run without it, whether or not
+  `podman_enabled` is true, and `server` is the only accepted value.
+- A host that ran an edition's engine keeps no configuration of its own: the
+  retired `99-podman.conf` is removed on the first run, and the product's
+  `99-container-podman.conf` replaces it.
 
 ## [0.1.0] - 2026-11-19
 
@@ -49,5 +95,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The configuration drop-ins are named `99-container-podman.conf`, so the
   collection does not collide with a site's own Podman configuration.
 
-[Unreleased]: https://github.com/benmoussa-younes/container/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/benmoussa-younes/container/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.2.0
 [0.1.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.1.0

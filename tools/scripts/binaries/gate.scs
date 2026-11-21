@@ -105,6 +105,135 @@ function git_search(root: path, arguments: list<string>, name: string) -> list<s
     }
 }
 
+function git_grep(root: path, flags: list<string>, pattern: string, paths: list<string>) -> list<string> {
+    let mutable arguments = ["grep", "-In", "--untracked"]
+    for flag in flags {
+        arguments.append(flag)
+    }
+    arguments.append("-e")
+    arguments.append(pattern)
+    arguments.append("--")
+    for entry in paths {
+        arguments.append(entry)
+    }
+    match process.run(process.request("git", arguments).with_working_directory(root)) {
+        ok(completed) => {
+            if completed.exit_code == 0 {
+                return completed.standard_output.lines()
+            }
+            if completed.exit_code == 1 {
+                return []
+            }
+            # A git error is not an empty result: the sentinel line belongs to no
+            # owner, so a failure turns the check red instead of passing.
+            return ["! git grep failed ({completed.exit_code}): {completed.standard_error.trim_whitespace()}"]
+        }
+        error(failure) => {
+            return ["! cannot run git: {failure.kind}"]
+        }
+    }
+}
+
+function git_grep_literal(root: path, pattern: string, paths: list<string>) -> list<string> {
+    return git_grep(root, ["--fixed-strings"], pattern, paths)
+}
+
+function git_grep_regex(root: path, pattern: string, paths: list<string>) -> list<string> {
+    return git_grep(root, ["--extended-regexp"], pattern, paths)
+}
+
+# `git grep` prints `path:line:text`. A comment cannot write a file, so it is
+# not a writer; a line of another file is.
+function code_lines(lines: list<string>) -> list<string> {
+    let mutable kept: list<string> = []
+    for line in lines {
+        if not line.contains(":#") {
+            kept.append(line)
+        }
+    }
+    return kept
+}
+
+function lines_outside_file(lines: list<string>, owner: string) -> list<string> {
+    let mutable outside: list<string> = []
+    for line in code_lines(lines) {
+        if not line.starts_with(owner + ":") {
+            outside.append(line)
+        }
+    }
+    return outside
+}
+
+function lines_outside_directory(lines: list<string>, directory: string) -> list<string> {
+    let mutable outside: list<string> = []
+    for line in code_lines(lines) {
+        if not line.starts_with(directory) {
+            outside.append(line)
+        }
+    }
+    return outside
+}
+
+# One owner of `/etc/containers/*.conf.d/99-*-podman.conf`. The product
+# writes `99-container-podman.conf` from `roles/podman/`, and the retired
+# `99-podman.conf` survives only as a removal target. Untracked files count:
+# one is still a second writer on the machine that runs the role.
+function check_registries_owner(root: path) -> list<string> {
+    let owner = "roles/podman/defaults/main.yml"
+    let engine_dir = "roles/podman/"
+    # Only a default, a variable, a task, a template or a handler can write a
+    # file; prose in a role README or an argument spec describes a name without
+    # owning it.
+    let code_paths = [
+        "roles/*/defaults/**",
+        "roles/*/vars/**",
+        "roles/*/tasks/**",
+        "roles/*/templates/**",
+        "roles/*/handlers/**",
+        "playbooks/**"
+    ]
+    let mutable result: list<string> = []
+    let legacy = git_grep_literal(root, "99-podman.conf", code_paths)
+    for problem in note(lines_outside_file(legacy, owner).length() == 0, "one registries writer", lines_outside_file(legacy, owner).join("; ")) {
+        result.append(problem)
+    }
+    for problem in note(code_lines(legacy).length() > 0, "retired drop-in removed", "no tracked file names `99-podman.conf`, so nothing removes the drop-in the edition roles wrote") {
+        result.append(problem)
+    }
+    # The product promises one `99-*podman*` file, not one spelling of it:
+    # any other name of that shape is a second writer.
+    let dropins = git_grep_regex(root, "99-[A-Za-z0-9_-]*podman[.]conf", code_paths)
+    for problem in note(lines_outside_file(dropins, owner).length() == 0, "one podman drop-in name", lines_outside_file(dropins, owner).join("; ")) {
+        result.append(problem)
+    }
+    let directories = git_grep_literal(root, "registries.conf.d", code_paths)
+    for problem in note(lines_outside_file(directories, owner).length() == 0, "registries directory owner", lines_outside_file(directories, owner).join("; ")) {
+        result.append(problem)
+    }
+    # A writer may name one of the engine's variables instead of the path: the
+    # directory ones too, because a second file under the same directory is the
+    # collision this check exists for.
+    for variable in ["podman_registries_dir", "podman_registries_file", "podman_containers_dir", "podman_containers_file"] {
+        let lines = git_grep_literal(root, variable, code_paths)
+        for problem in note(lines_outside_directory(lines, engine_dir).length() == 0, "engine configuration variable owner", lines_outside_directory(lines, engine_dir).join("; ")) {
+            result.append(problem)
+        }
+    }
+    for problem in note(read_text(root, owner).contains("99-container-podman.conf"), "product drop-in name", "{owner} does not name `99-container-podman.conf`") {
+        result.append(problem)
+    }
+    # The removal task has a file of its own, so the state asserted here is the
+    # state of that task and not of another `state: absent` in the role.
+    let stale = read_text(root, "roles/podman/tasks/stale.yml")
+    for problem in note(stale.contains("podman_stale_config_files") and stale.contains("state: absent") and not stale.contains("state: present"), "stale drop-in removed", "roles/podman/tasks/stale.yml does not remove `podman_stale_config_files` with `state: absent`") {
+        result.append(problem)
+    }
+    for problem in note(read_text(root, "roles/podman/tasks/main.yml").contains("include_tasks: stale.yml"), "stale drop-in included", "roles/podman/tasks/main.yml does not include `stale.yml`") {
+        result.append(problem)
+    }
+    return result
+}
+
 function check_paths(root: path) -> list<string> {
     let files = tracked_files(root)
     let mutable result: list<string> = []
@@ -363,6 +492,9 @@ for problem in check_version(root) {
     failures.append(problem)
 }
 for problem in check_identity(root) {
+    failures.append(problem)
+}
+for problem in check_registries_owner(root) {
     failures.append(problem)
 }
 for problem in check_licences(root, false) {
