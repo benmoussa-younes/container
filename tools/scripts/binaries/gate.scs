@@ -105,6 +105,71 @@ function git_search(root: path, arguments: list<string>, name: string) -> list<s
     }
 }
 
+function git_grep(root: path, pattern: string, paths: list<string>) -> list<string> {
+    let mutable arguments = ["grep", "-In", "--fixed-strings", "-e", pattern, "--"]
+    for entry in paths {
+        arguments.append(entry)
+    }
+    match process.run(process.request("git", arguments).with_working_directory(root)) {
+        ok(completed) => {
+            if completed.exit_code == 0 {
+                return completed.standard_output.lines()
+            }
+            return []
+        }
+        error(failure) => {
+            return []
+        }
+    }
+}
+
+# `git grep` prints `path:line:text`; a line of another file is a second writer.
+function lines_outside(lines: list<string>, owner: string) -> list<string> {
+    let mutable outside: list<string> = []
+    for line in lines {
+        if not line.starts_with(owner + ":") {
+            outside.append(line)
+        }
+    }
+    return outside
+}
+
+# A2: one owner of `/etc/containers/*.conf.d/99-*-podman.conf`. The product
+# writes `99-container-podman.conf` from `roles/podman/`, and the retired
+# `99-podman.conf` survives only as a removal target.
+function check_registries_owner(root: path) -> list<string> {
+    let owner = "roles/podman/defaults/main.yml"
+    # Only a task, a template, a handler or a default can write a file; prose in
+    # a role README or an argument spec describes the name without owning it.
+    let code_paths = [
+        "roles/*/defaults/**",
+        "roles/*/tasks/**",
+        "roles/*/templates/**",
+        "roles/*/handlers/**",
+        "playbooks/**"
+    ]
+    let mutable result: list<string> = []
+    let legacy = git_grep(root, "99-podman.conf", code_paths)
+    for problem in note(lines_outside(legacy, owner).length() == 0, "one registries writer", lines_outside(legacy, owner).join("; ")) {
+        result.append(problem)
+    }
+    for problem in note(legacy.length() > 0, "retired drop-in removed", "no tracked file names `99-podman.conf`, so nothing removes the drop-in the edition roles wrote") {
+        result.append(problem)
+    }
+    let directories = git_grep(root, "registries.conf.d", code_paths)
+    for problem in note(lines_outside(directories, owner).length() == 0, "registries directory owner", lines_outside(directories, owner).join("; ")) {
+        result.append(problem)
+    }
+    for problem in note(read_text(root, owner).contains("99-container-podman.conf"), "product drop-in name", "{owner} does not name `99-container-podman.conf`") {
+        result.append(problem)
+    }
+    let tasks = read_text(root, "roles/podman/tasks/main.yml")
+    for problem in note(tasks.contains("podman_stale_config_files") and tasks.contains("state: absent"), "stale drop-in removed", "roles/podman/tasks/main.yml does not remove `podman_stale_config_files` with `state: absent`") {
+        result.append(problem)
+    }
+    return result
+}
+
 function check_paths(root: path) -> list<string> {
     let files = tracked_files(root)
     let mutable result: list<string> = []
@@ -363,6 +428,9 @@ for problem in check_version(root) {
     failures.append(problem)
 }
 for problem in check_identity(root) {
+    failures.append(problem)
+}
+for problem in check_registries_owner(root) {
     failures.append(problem)
 }
 for problem in check_licences(root, false) {

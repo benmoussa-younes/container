@@ -1,6 +1,6 @@
 # Container
 
-[![Release](https://img.shields.io/badge/release-0.1.0-blue)](https://github.com/benmoussa-younes/container/releases/tag/v0.1.0)
+[![Release](https://img.shields.io/badge/release-0.2.0-blue)](https://github.com/benmoussa-younes/container/releases/tag/v0.2.0)
 [![Licence](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](LICENSE)
 [![CI](https://github.com/benmoussa-younes/container/actions/workflows/ci.yml/badge.svg)](https://github.com/benmoussa-younes/container/actions/workflows/ci.yml)
 
@@ -25,6 +25,13 @@ machine is; this collection says what it runs. It is shipped as the collection
   the log size unbounded and the pids limit at 1024. The product turns the
   first on, bounds the other two, sets `umask` 0077 and names the `crun`
   runtime.
+- **One writer per file**: the engine writes `99-container-podman.conf` and
+  removes the `99-podman.conf` the retired edition roles left under the same
+  directories, so the lexical order of `99-*.conf` can no longer make an old
+  file win.
+- **An edition it reads, never writes**: `container_host_edition` names the
+  edition the host already carries (`server` today); an absent or unsupported
+  value fails the run instead of being guessed.
 - **The site's Quadlet declarations**: `container`, `volume`, `network`, `pod`,
   `image`, `build` and `kube` files in the owning account's generator
   directory, a user-manager reload and a read-back of every generated unit.
@@ -61,17 +68,17 @@ collection.
 From the release tarball (the collection is published on GitHub, not Galaxy):
 
 ```sh
-ansible-galaxy collection install benmoussa-container-0.1.0.tar.gz
+ansible-galaxy collection install benmoussa-container-0.2.0.tar.gz
 ```
 
 Or, from the signed tag:
 
 ```sh
 ansible-galaxy collection install \
-  git+https://github.com/benmoussa-younes/container.git,v0.1.0
+  git+https://github.com/benmoussa-younes/container.git,v0.2.0
 ```
 
-The release also carries `container-0.1.0-src.tar.gz` (the source tree with the
+The release also carries `container-0.2.0-src.tar.gz` (the source tree with the
 example inventory and the repository tooling) and `SHA256SUMS`. Verify the
 checksums before installing:
 
@@ -91,7 +98,10 @@ all:
     ansible_python_interpreter: /usr/bin/python3
 
     # The engine. The account must already exist; `quadlet` follows it.
+    # `container_host_edition` is the edition the host already carries: the
+    # collection owns no identity and accepts `server` today.
     podman_enabled: true
+    container_host_edition: server
     podman_user: "{{ ansible_user }}"
     podman_registries: [docker.io]
 
@@ -205,11 +215,12 @@ defaults are on. Empty it deliberately if a site needs one.
 
 ## Project status
 
-`0.1.0` is the first release. Debian is the only supported base; a newer Debian
-release is added when the Server collection declares it. The product is
-maintained by one author; there is no support contract, service level or
-warranty, express or implied (see [`CONTRIBUTING.md`](CONTRIBUTING.md) and
-[`SECURITY.md`](SECURITY.md)).
+`0.2.0` removes the configuration the edition collections used to own and
+refuses an unsupported host edition; `0.1.0` was the first release. Debian is
+the only supported base; a newer Debian release is added when the Server
+collection declares it. The product is maintained by one author; there is no
+support contract, service level or warranty, express or implied (see
+[`CONTRIBUTING.md`](CONTRIBUTING.md) and [`SECURITY.md`](SECURITY.md)).
 
 ## Support
 

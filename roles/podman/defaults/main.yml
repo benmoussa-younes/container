@@ -6,6 +6,12 @@
 # rootless engine; the rootful socket is not enabled.
 podman_enabled: false
 
+# The edition the host already carries. This collection owns no identity: it
+# installs on an edition, never chooses or writes one. The variable has no
+# entry here on purpose — a declared value is validated against the `choices`
+# of `meta/argument_specs.yml` (`server` today), and an absent one fails the
+# role's first task with a message that says what to declare.
+
 # The account that owns the rootless engine. It defaults to the product's human
 # account; a site may name another existing account.
 podman_user: "{{ accounts_human.name | default('') }}"
@@ -32,6 +38,15 @@ podman_registries_dir: /etc/containers/registries.conf.d
 podman_registries_file: "{{ podman_registries_dir }}/99-container-podman.conf"
 podman_containers_dir: /etc/containers/containers.conf.d
 podman_containers_file: "{{ podman_containers_dir }}/99-container-podman.conf"
+
+# The drop-ins the retired edition roles wrote under these directories. Two
+# writers of the same file means the last one wins, and the lexical order of
+# `99-*.conf` makes the old name win, so this role removes them before it
+# writes its own. The list follows the directories above, so a site that
+# relocates them for a fixture relocates the removal too.
+podman_stale_config_files:
+  - "{{ podman_registries_dir }}/99-podman.conf"
+  - "{{ podman_containers_dir }}/99-podman.conf"
 
 # The engine's own defaults, closer to the product than Debian's.
 #

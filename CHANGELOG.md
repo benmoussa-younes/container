@@ -5,7 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-11-21
+
+### Added
+
+- `podman`: `container_host_edition` states the edition the host already
+  carries. The collection owns no identity: the argument spec accepts `server`
+  only, an unsupported value fails validation, and an absent declaration fails
+  the role's first task with a message that names what to declare.
+- `podman`: the role removes the `99-podman.conf` the retired `server` and
+  `workstation` roles wrote under `registries.conf.d` and `containers.conf.d`,
+  before writing its own `99-container-podman.conf`, so exactly one file owns
+  each configuration. `podman_stale_config_files` follows the two directories.
+- The gate's `one registries writer` check: only `roles/podman/defaults/main.yml`
+  may name a registries drop-in, and the retired name survives only as the
+  removal target.
+
+### Changed
+
+- The collection version is `0.2.0`. The `0.3.0` invariants written in
+  `publication-roadmap.md` (images by digest, `storage.conf.d`, the auto-update
+  timer, a service account, no TCP socket) are not implemented yet, so the
+  collection does not claim that number.
 
 ## [0.1.0] - 2026-11-19
 
@@ -49,5 +70,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The configuration drop-ins are named `99-container-podman.conf`, so the
   collection does not collide with a site's own Podman configuration.
 
-[Unreleased]: https://github.com/benmoussa-younes/container/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/benmoussa-younes/container/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.2.0
 [0.1.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.1.0

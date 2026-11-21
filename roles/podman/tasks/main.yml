@@ -3,6 +3,16 @@
 - name: The rootless Podman engine is configured
   when: podman_enabled | bool
   block:
+    - name: The host edition this collection installs on is declared
+      ansible.builtin.assert:
+        that:
+          - container_host_edition | default('') | length > 0
+        fail_msg: >-
+          container_host_edition is not declared. benmoussa.container owns no
+          identity and installs on the edition the host already carries:
+          declare `container_host_edition: server` in the host's variables.
+        quiet: true
+
     - name: The owning account is declared
       ansible.builtin.assert:
         that:
@@ -79,6 +89,17 @@
       loop:
         - "{{ podman_registries_dir }}"
         - "{{ podman_containers_dir }}"
+
+    # Tagged: the removal is the one step a fixture can apply without root, so
+    # a site proves it with `--tags registries` before the engine is installed.
+    - name: A drop-in the retired edition roles wrote is removed
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop: "{{ podman_stale_config_files }}"
+      loop_control:
+        label: "{{ item }}"
+      tags: [registries]
 
     - name: The registry search path is declared
       ansible.builtin.template:
