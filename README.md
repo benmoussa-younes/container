@@ -1,4 +1,4 @@
-# Container Edition
+# Container
 
 [![Release](https://img.shields.io/badge/release-0.1.0-blue)](https://github.com/benmoussa-younes/container/releases/tag/v0.1.0)
 [![Licence](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](LICENSE)
@@ -10,8 +10,11 @@ declarations run on. The product owns the engine, the generator's input and the
 base; the definitions themselves — ports, volumes, networks, secrets — remain
 the site's.
 
-It is the container counterpart of the Server and Workstation collections, and
-it is shipped as the collection `benmoussa.container`.
+It installs on a host that already carries an edition — Server Edition or
+Workstation Edition — and it **owns no identity**: no `os-release`, no login
+banner, no boot splash, no version line of its own. The edition says what the
+machine is; this collection says what it runs. It is shipped as the collection
+`benmoussa.container`.
 
 ## What it does
 
@@ -38,9 +41,8 @@ it is shipped as the collection `benmoussa.container`.
 
 ## Requirements
 
-- a target running **Debian**; the supported release is named in the Server
-  collection's identity distribution table, and the engine packages come from
-  the distribution;
+- a target running **Debian 13** (`trixie`), the release both editions support
+  today, with the engine packages taken from the distribution;
 - `ansible-core` **2.19 or later** on the controller, with SSH access to the
   target;
 - an existing human account that will own the rootless engine; the product
