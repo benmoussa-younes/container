@@ -40,7 +40,7 @@ podman build -t localhost/benmoussa/container:0.1.0 images/base
 
 ## Repository facts
 
-- The collection is `benmoussa.container`, version `0.1.0`.
+- The collection is `benmoussa.container`, version `0.2.0`.
 - The product code is `AGPL-3.0-or-later`; the documentation is
   `CC-BY-SA-4.0`. The base image's Debian packages keep their own licences.
 - A release is a signed tag `v<version>` and three assets: the collection

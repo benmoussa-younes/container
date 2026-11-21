@@ -11,10 +11,10 @@ base; the definitions themselves — ports, volumes, networks, secrets — remai
 the site's.
 
 It installs on a host that already carries an edition — Server Edition or
-Workstation Edition — and it **owns no identity**: no `os-release`, no login
-banner, no boot splash, no version line of its own. The edition says what the
-machine is; this collection says what it runs. It is shipped as the collection
-`benmoussa.container`.
+Workstation Edition — and it **owns no identity**: no `os-release` of its own,
+no login banner, no boot splash, no version line of its own. The edition says
+what the machine is; this collection says what it runs. It is shipped as the
+collection `benmoussa.container`.
 
 ## What it does
 
@@ -30,8 +30,8 @@ machine is; this collection says what it runs. It is shipped as the collection
   directories, so the lexical order of `99-*.conf` can no longer make an old
   file win.
 - **An edition it reads, never writes**: `container_host_edition` names the
-  edition the host already carries (`server` today); an absent or unsupported
-  value fails the run instead of being guessed.
+  edition the host already carries (`server` today). Applying the engine role
+  without it, or with another value, fails the run instead of guessing.
 - **The site's Quadlet declarations**: `container`, `volume`, `network`, `pod`,
   `image`, `build` and `kube` files in the owning account's generator
   directory, a user-manager reload and a read-back of every generated unit.
@@ -44,7 +44,9 @@ machine is; this collection says what it runs. It is shipped as the collection
   `SecurityLabelDisable=true` fails the run while the hardened defaults are on.
 - **A base image**: the Debian minimal base pinned by digest, TLS roots,
   `tzdata`, `curl`, `procps` and the Scripts interpreter, one non-root
-  account, a locked root, no setuid bit and a branded os-release.
+  account, a locked root and no setuid bit. The image keeps Debian's own
+  `/etc/os-release`; the collection writes no identity, in an image or on a
+  host.
 
 ## Requirements
 

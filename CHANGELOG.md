@@ -11,22 +11,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `podman`: `container_host_edition` states the edition the host already
   carries. The collection owns no identity: the argument spec accepts `server`
-  only, an unsupported value fails validation, and an absent declaration fails
-  the role's first task with a message that names what to declare.
+  only and an unsupported value fails validation; applying the role without the
+  declaration fails its first task, whether or not the engine is selected.
 - `podman`: the role removes the `99-podman.conf` the retired `server` and
   `workstation` roles wrote under `registries.conf.d` and `containers.conf.d`,
   before writing its own `99-container-podman.conf`, so exactly one file owns
-  each configuration. `podman_stale_config_files` follows the two directories.
+  each configuration. `podman_stale_config_files` follows the two directories,
+  and the removal restarts the user socket like any other engine change.
 - The gate's `one registries writer` check: only `roles/podman/defaults/main.yml`
   may name a registries drop-in, and the retired name survives only as the
   removal target.
 
 ### Changed
 
+- The base image keeps Debian's own `/etc/os-release` and no longer writes a
+  `PRETTY_NAME`, a version of its own or `/etc/container-edition`: the
+  collection is a capability and owns no identity, in an image or on a host.
 - The collection version is `0.2.0`. The `0.3.0` invariants written in
   `publication-roadmap.md` (images by digest, `storage.conf.d`, the auto-update
   timer, a service account, no TCP socket) are not implemented yet, so the
   collection does not claim that number.
+
+### Migration
+
+- From `0.1.0`: declare `container_host_edition: server` in the host's
+  variables. The engine role now refuses to run without it, whether or not
+  `podman_enabled` is true, and `server` is the only accepted value.
+- A host that ran an edition's engine keeps no configuration of its own: the
+  retired `99-podman.conf` is removed on the first run, and the product's
+  `99-container-podman.conf` replaces it.
 
 ## [0.1.0] - 2026-11-19
 
