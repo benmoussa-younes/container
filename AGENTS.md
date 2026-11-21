@@ -1,9 +1,10 @@
 # AGENTS.md — Container
 
 Ansible roles that install a rootless Podman engine on a Debian host, write the
-site's Quadlet declarations and ship the Container Edition base image. The
-product owns the engine, the generator's input and the base; a port, a volume, a
-network and a secret remain the site's.
+site's Quadlet declarations and ship the base image. The product owns the
+engine, the generator's input and the base; a port, a volume, a network and a
+secret remain the site's. It is a capability, not an edition: it reads
+`container_host_edition` and owns no identity.
 
 ## Build and test
 
