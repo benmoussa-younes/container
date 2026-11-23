@@ -88,7 +88,7 @@ checksums before installing:
 sha256sum -c SHA256SUMS
 ```
 
-## Quick start
+## Usage
 
 Create the site inventory from the source archive's `inventories/example/`, or
 write a minimal one:
@@ -236,6 +236,12 @@ the only supported base; a newer Debian release is added when the Server
 collection declares it. The product is maintained by one author; there is no
 support contract, service level or warranty, express or implied (see
 [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`SECURITY.md`](SECURITY.md)).
+
+## Forking
+
+A fork is welcome. You maintain it: the licence grants use, study, change and
+redistribution, and the collection is delivered **as is**, without warranty or
+support beyond the licence.
 
 ## Support
 
