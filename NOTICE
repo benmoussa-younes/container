@@ -28,6 +28,6 @@ image and Debian packages. Those packages stay under their own licences; the
 product neither redistributes modified copies nor relicenses them.
 
 The image installs the Scripts interpreter from its public GitHub release
-(`scripts_0.1.2_amd64.deb`, verified against the release `SHA256SUMS`). Scripts
+(`scripts_0.2.1_amd64.deb`, verified against the release `SHA256SUMS`). Scripts
 is a separate work under the GPL-3.0-or-later; the image neither redistributes
 it as a product nor relicenses it.

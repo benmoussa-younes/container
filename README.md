@@ -141,7 +141,7 @@ drop-in; emptying a default removes it everywhere.
 
 `images/base/Containerfile` is the image the site's containers start from: the
 Debian minimal base pinned by digest, TLS roots, `tzdata`, `curl` for
-healthchecks, `procps`, the Scripts interpreter (release 0.1.2, verified against
+healthchecks, `procps`, the Scripts interpreter (release 0.2.1, verified against
 the release's `SHA256SUMS`), one non-root account (`app`, UID 1000), a locked
 root, no setuid bit and no package list. It writes nothing outside a tmpfs,
 which is what makes the read-only defaults of the Quadlet role usable.
