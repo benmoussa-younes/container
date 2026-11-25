@@ -36,8 +36,8 @@ RUN apt-get update \
       curl \
       procps \
  && curl -fsSL -o /tmp/scripts.deb \
-      https://github.com/benmoussa-younes/scripts/releases/download/v0.1.2/scripts_0.1.2_amd64.deb \
- && echo "1170748df0d104cd3dbc36bbfa0f9779649eb6039585c452bf562f03cb86f977  /tmp/scripts.deb" \
+      https://github.com/benmoussa-younes/scripts/releases/download/v0.2.1/scripts_0.2.1_amd64.deb \
+ && echo "8d55d8a35942f917badde9f8cfade3908fa9e20537d05ef8307aa4623b2dcf0d  /tmp/scripts.deb" \
       | sha256sum -c - \
  && apt-get install -y --no-install-recommends /tmp/scripts.deb \
  && rm -f /tmp/scripts.deb \
