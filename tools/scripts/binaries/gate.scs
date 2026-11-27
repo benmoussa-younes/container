@@ -679,10 +679,10 @@ for problem in check_licences(root, false) {
 for problem in git_search(root, ["grep", "--cached", "-IniE", "-e", secrets.joined(), "--", ".", ":(exclude)tools", ":(exclude)LICENSES"], "no secret shape") {
     failures.append(problem)
 }
-for problem in execute(root, process.request("ansible-lint", ["playbooks", "roles"]), "ansible-lint") {
+for problem in execute(root, process.request("ansible-lint", ["playbooks", "roles", "tests"]), "ansible-lint") {
     failures.append(problem)
 }
-for problem in execute(root, process.request("yamllint", ["-c", ".yamllint", "roles", "playbooks", "inventories"]), "yamllint") {
+for problem in execute(root, process.request("yamllint", ["-c", ".yamllint", "roles", "playbooks", "inventories", "tests"]), "yamllint") {
     failures.append(problem)
 }
 for problem in execute(root, process.request("reuse", ["lint"]), "reuse lint") {
