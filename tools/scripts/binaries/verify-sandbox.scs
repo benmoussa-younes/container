@@ -5,9 +5,10 @@
 #   ANSIBLE_BECOME_PASSWORD_FILE=~/.ansible/become scripts run tools/scripts/binaries/verify-sandbox.scs
 #
 # It needs root, which the owner gives: every `ansible-playbook` call runs
-# `become: true` on `localhost`, and `ANSIBLE_BECOME_PASSWORD_FILE` (or
-# `--ask-become-pass` forwarded after `--`) supplies the password. The sandbox
-# account must already exist:
+# `become: true` on `localhost`, so the sandbox account and the become password
+# are the owner's. The runner captures the child's output, so the password comes
+# from `ANSIBLE_BECOME_PASSWORD_FILE` rather than an interactive `-K`. The
+# sandbox account must already exist:
 #
 #   sudo useradd --create-home --shell /usr/sbin/nologin ctr-sandbox
 #
