@@ -70,7 +70,7 @@ function playbook(root: path, arguments: list<string>, label: string) -> map<str
         ok(completed) => {
             outcome["exit"] = "{completed.exit_code}"
             for line in completed.standard_output.lines() {
-                if line.starts_with("sandbox") and line.contains("changed=") {
+                if line.starts_with("test-host") and line.contains("changed=") {
                     outcome["recap"] = line.trim_whitespace()
                 }
             }

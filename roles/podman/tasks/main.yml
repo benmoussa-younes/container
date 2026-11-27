@@ -110,6 +110,21 @@
         state: present
         cache_valid_time: 3600
 
+    - name: The container configuration directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - "{{ podman_registries_dir }}"
+        - "{{ podman_containers_dir }}"
+        # The sysctl drop-in may be relocated (a sandbox keeps it under /var/tmp);
+        # its parent is not one of the engine's directories, so it is created
+        # here rather than assumed.
+        - "{{ podman_userns_sysctl | dirname }}"
+
     - name: The user namespace setting rootless Podman needs is declared
       ansible.builtin.copy:
         content: |
@@ -150,21 +165,6 @@
           {{ podman_userns_value.stdout | trim }}, not 1, so rootless Podman
           cannot clone its namespace. Check {{ podman_userns_sysctl }} and run
           `/usr/sbin/sysctl --system`.
-
-    - name: The container configuration directories exist
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-      loop:
-        - "{{ podman_registries_dir }}"
-        - "{{ podman_containers_dir }}"
-        # The sysctl drop-in may be relocated (a sandbox keeps it under /tmp);
-        # its parent is not one of the engine's directories, so it is created
-        # here rather than assumed.
-        - "{{ podman_userns_sysctl | dirname }}"
 
     # Tagged (here and on the task in `stale.yml`, because a tag on an include
     # is not inherited) so a fixture can reach the removal with
