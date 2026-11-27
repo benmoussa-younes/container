@@ -1,0 +1,135 @@
+---
+# The account's subordinate ID ranges, applied.
+#
+# `subuid-plan.yml` decides; this file writes, and only what the decision names.
+# The repair removes *this account's* unusable ranges and then adds the free
+# block the plan computed; it never touches another account's line.
+#
+# `usermod --add-subuids` appends and checks nothing: it does not read
+# SUB_UID_MIN/MAX/COUNT from `/etc/login.defs`, and it accepts a range another
+# account already holds (measured on shadow 1:4.17.4). Every check that makes the
+# block safe is therefore in the plan, before the first write.
+- name: The subordinate ID ranges are planned before they are written
+  ansible.builtin.include_tasks: subuid-plan.yml
+
+# The unusable range goes first. `usermod --del-subuids 100000-106552` deletes
+# the span it names, so adding the wider block first would make it remove part of
+# the new one (measured on shadow 1:4.17.4: 100000:6553 + 100000:65536, then
+# delete 100000-106552, leaves 106553:58983). A run interrupted between the two
+# leaves the account with no subuid, and the next run sees an absent account and
+# adds a block without needing `podman_subuid_repair`.
+- name: The account's unusable uid ranges are removed
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    argv:
+      - usermod
+      - --del-subuids
+      - "{{ (item.split(' ')[2] | int) }}-{{ (item.split(' ')[2] | int) + (item.split(' ')[3] | int) - 1 }}"
+      - "{{ podman_user }}"
+  loop: "{{ podman_subid_removals | select('match', '^REMOVE uid ') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: true
+  when: podman_subid_action == 'repair'
+
+- name: The account's unusable gid ranges are removed
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    argv:
+      - usermod
+      - --del-subgids
+      - "{{ (item.split(' ')[2] | int) }}-{{ (item.split(' ')[2] | int) + (item.split(' ')[3] | int) - 1 }}"
+      - "{{ podman_user }}"
+  loop: "{{ podman_subid_removals | select('match', '^REMOVE gid ') | list }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: true
+  when: podman_subid_action == 'repair'
+
+# The block goes in only after the range it replaces is gone, because
+# `usermod --del-subuids` deletes the span it names whatever else is there.
+- name: The planned subordinate ID block is declared
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    argv:
+      - usermod
+      - --add-subuids
+      - "{{ podman_subid_range }}"
+      - --add-subgids
+      - "{{ podman_subid_range }}"
+      - "{{ podman_user }}"
+  when: podman_subid_action in ['add', 'repair']
+  changed_when: true
+
+# The account's pause process keeps the mapping it started with; podman's own
+# tutorial names this command, not a service restart, as the way to adopt a new
+# one.
+- name: The account's pause process adopts the new mapping
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    cmd: podman system migrate
+  become: true
+  become_user: "{{ podman_user }}"
+  environment:
+    HOME: "{{ podman_home }}"
+    USER: "{{ podman_user }}"
+    LOGNAME: "{{ podman_user }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ podman_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ podman_uid }}/bus"
+  register: podman_subid_migrate
+  changed_when: false
+  when:
+    - podman_system_migrate | bool
+    - podman_linger | bool
+    - podman_subid_action != 'none'
+
+# The kernel is the authority: the file says what was asked, the map says what
+# the engine got. Both maps are read, and both must name the planned block.
+- name: The subordinate ID mapping is read back
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    cmd: "podman unshare cat {{ item }}"
+  become: true
+  become_user: "{{ podman_user }}"
+  environment:
+    HOME: "{{ podman_home }}"
+    USER: "{{ podman_user }}"
+    LOGNAME: "{{ podman_user }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ podman_uid }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ podman_uid }}/bus"
+  loop:
+    - /proc/self/uid_map
+    - /proc/self/gid_map
+  loop_control:
+    label: "{{ item }}"
+  register: podman_subid_map
+  changed_when: false
+  when:
+    - podman_verify | bool
+    # Without linger the account's runtime directory exists only during a login
+    # session, and `podman unshare` cannot run from an Ansible play.
+    - podman_linger | bool
+    - not ansible_check_mode
+
+- name: The engine maps the planned block
+  ansible.builtin.assert:
+    that:
+      - podman_subid_expected_line in podman_subid_map_lines
+    fail_msg: >-
+      {{ podman_user }}: `{{ item.item }}` does not contain
+      `{{ podman_subid_expected_line }}` (got `{{ item.stdout | trim }}`).
+      The engine does not use the range the two files declare.
+    quiet: true
+  loop: "{{ podman_subid_map.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  vars:
+    # `/proc/self/uid_map` pads its three columns, so the lines are normalised
+    # before they are compared with the block the plan promised.
+    podman_subid_map_lines: >-
+      {{ item.stdout_lines | map('trim') | map('regex_replace', ' +', ' ') | list }}
+    podman_subid_chosen: >-
+      {{ (podman_subid_status.split(' ')[1:3] if podman_subid_action == 'none'
+          else podman_subid_plan[0].split(' ')[1:3]) }}
+    podman_subid_expected_line: "1 {{ podman_subid_chosen[0] }} {{ podman_subid_chosen[1] }}"
+  when:
+    - podman_verify | bool
+    # Without linger the account's runtime directory exists only during a login
+    # session, and `podman unshare` cannot run from an Ansible play.
+    - podman_linger | bool
+    - not ansible_check_mode

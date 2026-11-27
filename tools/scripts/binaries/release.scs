@@ -39,17 +39,17 @@ function stop(message: string) -> unit {
     process.exit_with_code(1)
 }
 
-function command(root: path, program: string, arguments: list<string>) -> process_result {
-    return command_in(root, program, arguments)
+function command(root: path, request: run_request) -> process_result {
+    return command_in(root, request)
 }
 
-function command_in(directory: path, program: string, arguments: list<string>) -> process_result {
-    match process.run(process.request(program, arguments).with_working_directory(directory)) {
+function command_in(directory: path, request: run_request) -> process_result {
+    match process.run(request.with_working_directory(directory)) {
         ok(completed) => {
             return completed
         }
         error(failure) => {
-            io.write_standard_error_line("release: cannot run {program}: {failure.kind}")
+            io.write_standard_error_line("release: cannot run {request.program}: {failure.kind}")
             io.write_standard_output_line(verdict.line(false))
             process.exit_with_code(1)
         }
@@ -69,7 +69,7 @@ if not version.matches(r"^[0-9]+\.[0-9]+\.[0-9]+$").value_or(false) {
     stop("VERSION `{version}` is not MAJOR.MINOR.PATCH")
 }
 
-let status = command(root, "git", ["status", "--porcelain"])
+let status = command(root, process.request("git", ["status", "--porcelain"]))
 if status.standard_output.trim_whitespace().length() > 0 {
     stop("the working tree is not clean")
 }
@@ -78,11 +78,11 @@ let tag = "v" + version
 if ci {
     io.write_standard_output_line("CI: the tag is verified by the workflow (`TAG` = `v{version}`)")
 } else {
-    let tag_lookup = command(root, "git", ["rev-parse", "-q", "--verify", "refs/tags/{tag}"])
+    let tag_lookup = command(root, process.request("git", ["rev-parse", "-q", "--verify", "refs/tags/{tag}"]))
     if tag_lookup.exit_code != 0 {
         stop("the signed tag `{tag}` does not exist")
     }
-    let tag_check = command(root, "git", ["verify-tag", tag])
+    let tag_check = command(root, process.request("git", ["verify-tag", tag]))
     if tag_check.exit_code != 0 {
         stop("`git verify-tag {tag}` refused the tag")
     }
@@ -103,17 +103,17 @@ let name = "container"
 let collection_name = "{namespace}-{name}-{version}.tar.gz"
 let source_name = "{name}-{version}-src.tar.gz"
 
-let build = command(root, "ansible-galaxy", ["collection", "build", "--output-path", dist.to_string()])
+let build = command(root, process.request("ansible-galaxy", ["collection", "build", "--output-path", dist.to_string()]))
 if build.exit_code != 0 {
     stop("ansible-galaxy collection build: {build.standard_error.trim_whitespace()}")
 }
 
-let archive = command(root, "git", ["archive", "--format=tar.gz", "--prefix={name}-{version}/", "-o", (dist / source_name).to_string(), "HEAD"])
+let archive = command(root, process.request("git", ["archive", "--format=tar.gz", "--prefix={name}-{version}/", "-o", (dist / source_name).to_string(), "HEAD"]))
 if archive.exit_code != 0 {
     stop("git archive: {archive.standard_error.trim_whitespace()}")
 }
 
-let checksums = command_in(dist, "sha256sum", [collection_name, source_name])
+let checksums = command_in(dist, process.request("sha256sum", [collection_name, source_name]))
 if checksums.exit_code != 0 {
     stop("sha256sum: {checksums.standard_error.trim_whitespace()}")
 }

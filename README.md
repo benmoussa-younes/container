@@ -1,6 +1,6 @@
 # Container
 
-[![Release](https://img.shields.io/badge/release-0.2.0-blue)](https://github.com/benmoussa-younes/container/releases/tag/v0.2.0)
+[![Release](https://img.shields.io/badge/release-0.3.0-blue)](https://github.com/benmoussa-younes/container/releases/tag/v0.3.0)
 [![Licence](https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue)](LICENSE)
 [![CI](https://github.com/benmoussa-younes/container/actions/workflows/ci.yml/badge.svg)](https://github.com/benmoussa-younes/container/actions/workflows/ci.yml)
 
@@ -21,6 +21,12 @@ collection `benmoussa.container`.
 - **One rootless engine**: packages, registry search path, the engine's
   drop-in, the user socket, linger and subordinate IDs. The rootful socket is
   never enabled and `/etc/containers/systemd` is never written.
+- **Subordinate IDs that are planned, not guessed**: the role computes the
+  account's range from `/etc/subuid` and `/etc/subgid`, refuses one another
+  account already holds, adds the first free block when the account has none,
+  lets the engine adopt it (`podman system migrate`) and reads the kernel's
+  `uid_map` and `gid_map` back. A host that delegates subordinate IDs to an NSS
+  provider is refused, because the role reads the files.
 - **The engine's defaults, decided**: Debian leaves `no_new_privileges` off,
   the log size unbounded and the pids limit at 1024. The product turns the
   first on, bounds the other two, sets `umask` 0077 and names the `crun`
@@ -70,17 +76,17 @@ collection.
 From the release tarball (the collection is published on GitHub, not Galaxy):
 
 ```sh
-ansible-galaxy collection install benmoussa-container-0.2.0.tar.gz
+ansible-galaxy collection install benmoussa-container-0.3.0.tar.gz
 ```
 
 Or, from the signed tag:
 
 ```sh
 ansible-galaxy collection install \
-  git+https://github.com/benmoussa-younes/container.git,v0.2.0
+  git+https://github.com/benmoussa-younes/container.git,v0.3.0
 ```
 
-The release also carries `container-0.2.0-src.tar.gz` (the source tree with the
+The release also carries `container-0.3.0-src.tar.gz` (the source tree with the
 example inventory and the repository tooling) and `SHA256SUMS`. Verify the
 checksums before installing:
 
@@ -123,6 +129,41 @@ ansible-playbook -i inventories/site/hosts.yml \
 
 The playbook targets `all`; use `--limit` when the inventory holds more than the
 hosts this product owns.
+
+### Subordinate IDs
+
+A rootless engine maps the container's UIDs onto host UIDs listed in
+`/etc/subuid` and `/etc/subgid`; the ranges of two accounts must not overlap, or
+one account can use another's namespace and corrupt it (podman's rootless
+tutorial). The role therefore computes a plan before it writes anything:
+
+| Answer | Meaning | What the role does |
+|---|---|---|
+| `OK` | one range, in both files, large enough, no overlap | nothing |
+| `ADD` | the account is in neither file | adds the first free block at or after `podman_subuid_start` |
+| `CONFLICT`, `SMALL`, `MISMATCH`, `HALF`, `MULTI` | the account holds a range it cannot use | fails the run, naming the reason |
+| `NOFREE` | no aligned block is free below 2^32 | fails the run |
+| `BADARG name\|count\|base` | the invocation cannot produce a safe block: a name the files cannot hold, a count outside 1…1 048 576, a base below 100000 or past 2^32 | fails the run |
+| `BADLINE uid\|gid\|passwd\|group <line>` | a line of one of the four files cannot be read | fails the run |
+
+A candidate block must be free of three things: another account's ranges in both
+files, **and** any UID `/etc/passwd` declares, **and** any GID `/etc/group`
+declares. On a host whose accounts start above 100000 the last two are what keep
+the block from mapping a real account's UID into every container. The count is
+capped at 1 048 576 (sixteen default blocks) for the same reason.
+
+A site that accepts the repair declares `podman_subuid_repair: true`: the role
+then removes **this account's** unusable ranges and adds the block the plan
+names (`usermod --del-subuids`/`--add-subuids`), runs `podman system migrate` as
+the account so its pause process adopts the mapping, then asserts that
+`/proc/self/uid_map` and `/proc/self/gid_map` contain the block. It never
+touches another account's line. `podman_subid_nsswitch_file` is read too: a host that puts `subid: sss` in
+`/etc/nsswitch.conf` is refused, because the plan reads the files.
+
+`--check` does not report the identifiers: `usermod` and `podman system migrate`
+are commands, so a dry run prints `changed=0` even when a real run would rewrite
+the two files. Run the play once to converge them, or read the plan with
+`--diff`.
 
 ### Default bounds
 
@@ -230,7 +271,7 @@ defaults are on. Empty it deliberately if a site needs one.
 
 ## Project status
 
-`0.2.0` removes the configuration the edition collections used to own and
+`0.3.0` plans the subordinate IDs the edition collections used to own and
 refuses an unsupported host edition; `0.1.0` was the first release. Debian is
 the only supported base; a newer Debian release is added when the Server
 collection declares it. The product is maintained by one author; there is no

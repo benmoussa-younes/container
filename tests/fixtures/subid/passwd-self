@@ -1,0 +1,2 @@
+root:x:0:0:root:/root:/usr/sbin/nologin
+alice:x:150000:150000::/nonexistent:/usr/sbin/nologin

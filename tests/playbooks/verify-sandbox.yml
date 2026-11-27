@@ -1,0 +1,146 @@
+---
+# Reads the sandbox converge back. Every assertion here is independent of the
+# role: it asks the machine, not the play's own facts.
+- name: The sandbox converge is read back
+  hosts: sandbox
+  become: true
+  gather_facts: false
+  vars:
+    podman_sandbox: /var/tmp/container-sandbox
+  tasks:
+    - name: The owning account is read
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ podman_user }}"
+
+    - name: The relocated engine configuration exists
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      register: podman_sandbox_files
+      loop:
+        - "{{ podman_sandbox }}/containers.conf.d/99-container-podman.conf"
+        - "{{ podman_sandbox }}/registries.conf.d/99-container-podman.conf"
+
+    - name: The engine defaults are the product's
+      ansible.builtin.assert:
+        that:
+          - "'no_new_privileges = true' in podman_sandbox_engine"
+          - "'pids_limit = 512' in podman_sandbox_engine"
+          - "'runtime = \"crun\"' in podman_sandbox_engine"
+        fail_msg: "{{ podman_sandbox_engine }}"
+      vars:
+        podman_sandbox_engine: "{{ podman_sandbox_files.results[0].content | b64decode }}"
+
+    - name: The registry search path is the product's
+      ansible.builtin.assert:
+        that:
+          - "'unqualified-search-registries = [\"docker.io\"]' in podman_sandbox_registries"
+        fail_msg: "{{ podman_sandbox_registries }}"
+      vars:
+        podman_sandbox_registries: "{{ podman_sandbox_files.results[1].content | b64decode }}"
+
+    - name: The account lingers
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: "loginctl show-user {{ podman_user }} -p Linger"
+      register: podman_sandbox_linger
+      changed_when: false
+
+    - name: The user manager starts without a login
+      ansible.builtin.assert:
+        that:
+          - podman_sandbox_linger.stdout | trim == 'Linger=yes'
+
+    - name: The rootless socket is read
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: systemctl --user is-active podman.socket
+      become: true
+      become_user: "{{ podman_user }}"
+      environment:
+        HOME: "{{ podman_sandbox_home }}"
+        USER: "{{ podman_user }}"
+        LOGNAME: "{{ podman_user }}"
+        XDG_RUNTIME_DIR: "/run/user/{{ podman_sandbox_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ podman_sandbox_uid }}/bus"
+      vars:
+        podman_sandbox_uid: "{{ ansible_facts.getent_passwd[podman_user][1] | default('') }}"
+        podman_sandbox_home: "{{ ansible_facts.getent_passwd[podman_user][4] | default('/') }}"
+      register: podman_sandbox_socket
+      changed_when: false
+      failed_when: false
+
+    - name: The rootless socket serves the account
+      ansible.builtin.assert:
+        that:
+          - podman_sandbox_socket.stdout | trim == 'active'
+
+    - name: The kernel mapping is read
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: "podman unshare cat {{ item }}"
+      become: true
+      become_user: "{{ podman_user }}"
+      environment:
+        HOME: "{{ podman_sandbox_home }}"
+        USER: "{{ podman_user }}"
+        LOGNAME: "{{ podman_user }}"
+        XDG_RUNTIME_DIR: "/run/user/{{ podman_sandbox_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ podman_sandbox_uid }}/bus"
+      vars:
+        podman_sandbox_uid: "{{ ansible_facts.getent_passwd[podman_user][1] | default('') }}"
+        podman_sandbox_home: "{{ ansible_facts.getent_passwd[podman_user][4] | default('/') }}"
+      loop:
+        - /proc/self/uid_map
+        - /proc/self/gid_map
+      register: podman_sandbox_maps
+      changed_when: false
+
+    # `/proc/self/uid_map` pads its three columns, so a line is normalised before
+    # it is matched.
+    - name: The engine maps a subordinate block, not the account alone
+      ansible.builtin.assert:
+        that:
+          - item.stdout_lines | map('trim') | map('regex_replace', ' +', ' ')
+            | select('match', '^1 [0-9]+ [0-9]+$') | list | length == 1
+        fail_msg: "{{ item.stdout | trim }}"
+      loop: "{{ podman_sandbox_maps.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # `getent subuid` does not exist on Debian: glibc has no subid database, and
+    # shadow-utils ships `getsubids` instead (measured on Debian 13: glibc has no subid database).
+    - name: The account's declared ranges are read
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: "getsubids {{ item.flag }} {{ podman_user }}"
+      loop:
+        - { flag: "", name: uid }
+        - { flag: "-g", name: gid }
+      loop_control:
+        label: "{{ item.name }}"
+      register: podman_sandbox_subid
+      changed_when: false
+      failed_when: false
+
+    # `uid_map` and `gid_map` write `container host size`; `getsubids` writes
+    # `start count`. The subordinate line (`1 …`) and the declared range must
+    # agree, or the engine runs on another block than the plan's, on either map.
+    - name: The account holds the ranges the engine maps
+      ansible.builtin.assert:
+        that:
+          - item.declared.rc == 0
+          - item.declared.stdout.split() | length >= 4
+          - item.declared.stdout.split()[3] | int >= 65536
+          - podman_sandbox_mapped_lines.split()[1] == item.declared.stdout.split()[2]
+          - podman_sandbox_mapped_lines.split()[2] == item.declared.stdout.split()[3]
+        fail_msg: >-
+          getsubids {{ item.name }} {{ podman_user }}:
+          {{ item.declared.stdout | default('nothing') }} ; map:
+          {{ podman_sandbox_mapped_lines | default('nothing') }}
+      loop:
+        - { name: uid, map: "{{ podman_sandbox_maps.results[0] }}", declared: "{{ podman_sandbox_subid.results[0] }}" }
+        - { name: gid, map: "{{ podman_sandbox_maps.results[1] }}", declared: "{{ podman_sandbox_subid.results[1] }}" }
+      loop_control:
+        label: "{{ item.name }}"
+      vars:
+        podman_sandbox_mapped_lines: >-
+          {{ (item.map.stdout_lines | default([])
+              | map('trim') | map('regex_replace', ' +', ' ')
+              | select('match', '^1 [0-9]+ [0-9]+$') | list | first) | default('') }}

@@ -23,6 +23,10 @@ podman_packages:
   - fuse-overlayfs
   - uidmap
   - passt
+  # `RunInit=true` is in the Quadlet default drop-in, and Podman's init binary is
+  # `catatonit`. Debian lists it as a *Recommends* of `podman`, so a host that
+  # installs no recommends starts no container at all.
+  - catatonit
 
 # The registries an unqualified image name searches.
 podman_registries:
@@ -51,9 +55,10 @@ podman_stale_config_files:
 # The engine's own defaults, closer to the product than Debian's.
 #
 # `no_new_privileges` is false in `containers.conf`, `log_size_max` is -1
-# (unbounded) and `pids_limit` is 1024: a single container can then spawn a
-# fork bomb no one bounds and fill the disk with its log. The product bounds all
-# three for every container, unit or not. `umask` is the container's file mode.
+# (unbounded) and `pids_limit` is 2048 (Debian's `/usr/share/containers/
+# containers.conf`): a single container can then spawn a fork bomb no one bounds
+# and fill the disk with its log. The product bounds all three for every
+# container, unit or not. `umask` is the container's file mode.
 podman_no_new_privileges: true
 podman_pids_limit: 512
 podman_log_size_max: 10485760
@@ -64,8 +69,40 @@ podman_runtime: crun
 podman_socket_enabled: true
 podman_linger: true
 
-# The subordinate ID range declared in /etc/subuid and /etc/subgid. The range
-# must not overlap another account; a collision is a hard failure.
+# The subordinate ID files, and the decision a broken state leads to.
+#
+# A rootless engine maps the container's UIDs onto these ranges, and podman's
+# rootless tutorial states the rule: the ranges of two accounts must not overlap,
+# or one account can use another's namespace and corrupt it. The role computes
+# the plan over both files (`files/subid-plan.awk`) and refuses a state it would
+# have to guess at: a range that overlaps another account, a range shorter than
+# `podman_subuid_count`, a range in one file only, or two ranges in one file.
+# `podman_subuid_repair: true` removes *this account's* unusable ranges and adds
+# the first free block at or after `podman_subuid_start`; it never touches
+# another account's line.
+podman_subuid_file: /etc/subuid
+podman_subgid_file: /etc/subgid
+# shadow-utils 4.9 can delegate subordinate IDs to an NSS provider
+# (`subid: sss`). The plan reads the files, so it refuses such a host instead of
+# reporting a range it cannot see.
+podman_subid_nsswitch_file: /etc/nsswitch.conf
+# The block must not contain an identifier a host account already holds: on a
+# host whose accounts start above 100000, a subordinate block would map that
+# account's own UID into every container. The plan reads both files and skips a
+# block that contains one.
+podman_subid_passwd_file: /etc/passwd
+podman_subid_group_file: /etc/group
+podman_subuid_repair: false
+
+# When the plan changes the ranges, the account's pause process still holds the
+# old mapping until `podman system migrate` runs as that account. Podman's
+# tutorial names that command, not a service restart, as the way to adopt a new
+# one.
+podman_system_migrate: true
+
+# The first subordinate ID block the plan may use, and the size it must have.
+# The plan walks `podman_subuid_start + k * podman_subuid_count` until a block is
+# free in both files, so two engines on one host never collide.
 podman_subuid_start: 100000
 podman_subuid_count: 65536
 
