@@ -85,12 +85,15 @@ jobs:
 
       - name: Check the repository scripts
         run: |
-          scripts check tools/scripts/binaries/gate.scs
-          scripts check tools/scripts/binaries/release.scs
-          scripts check tools/scripts/binaries/verify-release.scs
+          scripts check --deny-warnings tools/scripts/binaries/gate.scs
+          scripts check --deny-warnings tools/scripts/binaries/release.scs
+          scripts check --deny-warnings tools/scripts/binaries/verify-release.scs
+          scripts check --module --deny-warnings tools/scripts/modules/repo.scs
+          scripts check --module --deny-warnings tools/scripts/modules/secrets.scs
+          scripts check --module --deny-warnings tools/scripts/modules/verdict.scs
 
       - name: Gate
-        run: scripts run tools/scripts/binaries/gate.scs
+        run: scripts run --no-warnings tools/scripts/binaries/gate.scs
 
       - name: Verify tag matches VERSION
         run: test "$(cat VERSION)" = "${TAG#v}"
