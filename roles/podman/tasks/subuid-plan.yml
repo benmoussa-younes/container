@@ -1,0 +1,145 @@
+---
+# What `/etc/subuid` and `/etc/subgid` must say for one account.
+#
+# A rootless engine maps the container's UIDs onto the host UIDs this account
+# holds in those two files. Podman's rootless tutorial is explicit: the ranges of
+# two accounts must not overlap, or one account can use another's namespace and
+# corrupt it. A range the account cannot use is also a machine that never starts
+# a container.
+#
+# This file reads and decides, and writes nothing: `files/subid-plan.awk` turns
+# the two files into one answer, and an answer that needs a rewrite is refused
+# unless the repair is declared. `subuid.yml` applies the answer. Keeping the two
+# apart is what lets a fixture prove the decision without root.
+- name: The subordinate ID source is read
+  ansible.builtin.slurp:
+    src: "{{ podman_subid_nsswitch_file }}"
+  register: podman_subid_nsswitch
+  check_mode: false
+  failed_when: false
+
+# shadow-utils 4.9 lets `/etc/nsswitch.conf` put a `subid:` line in front of
+# the files (`subid: sss`), and then `/etc/subuid` is not the source of truth
+# (podman's rootless tutorial names the plugin). The plan reads the files, so a
+# host that delegates the identifiers is refused instead of half-configured.
+- name: The subordinate IDs come from the files the plan reads
+  ansible.builtin.assert:
+    that:
+      - podman_subid_nss_providers | length == 0 or podman_subid_nss_providers == ['files']
+    fail_msg: >-
+      {{ podman_subid_nsswitch_file }} declares `subid: {{ podman_subid_nss_providers | join(' ') }}`.
+      The plan reads `{{ podman_subuid_file }}` and `{{ podman_subgid_file }}`,
+      which such a host does not consult; the ranges may come from an identity
+      server instead. Configure the identifiers locally, or declare the range
+      yourself in a repository that owns the provider.
+    quiet: true
+  vars:
+    podman_subid_nss_line: >-
+      {{ (podman_subid_nsswitch.content | default('') | b64decode).splitlines()
+         | select('match', '^\s*subid:') | list }}
+    podman_subid_nss_providers: >-
+      {{ ((podman_subid_nss_line[0].split(':')[1].split('#')[0].split())
+          if podman_subid_nss_line | length > 0 else []) }}
+
+- name: The subordinate ID plan is computed
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    argv:
+      - awk
+      - -f
+      - "{{ role_path }}/files/subid-plan.awk"
+      - -v
+      - "user={{ podman_user }}"
+      - -v
+      - "base={{ podman_subuid_start | int }}"
+      - -v
+      - "count={{ podman_subuid_count | int }}"
+      - -v
+      - "uidfile={{ podman_subuid_file }}"
+      - -v
+      - "gidfile={{ podman_subgid_file }}"
+      - -v
+      - "passwdfile={{ podman_subid_passwd_file }}"
+      - -v
+      - "groupfile={{ podman_subid_group_file }}"
+      - "{{ podman_subuid_file }}"
+      - "{{ podman_subgid_file }}"
+      - "{{ podman_subid_passwd_file }}"
+      - "{{ podman_subid_group_file }}"
+  register: podman_subid
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+# `awk` exits 2 when a file is missing, and the planner writes one status line
+# before anything else; both are read here so a broken plan never reaches
+# `set_fact` as an empty string.
+- name: The plan carries one known answer
+  ansible.builtin.assert:
+    that:
+      - podman_subid_answer_lines | length > 0
+      - podman_subid_answer | length > 0
+      - podman_subid_answer.split(' ')[0] in podman_subid_answers
+    fail_msg: >-
+      `{{ podman_subuid_file }}`, `{{ podman_subgid_file }}`,
+      `{{ podman_subid_passwd_file }}` and `{{ podman_subid_group_file }}` could
+      not be read into a plan (`{{ podman_subid.stdout | default('') | trim }}`).
+      Check that the four files exist and are readable, and that awk is
+      installed.
+    quiet: true
+  vars:
+    podman_subid_answer_lines: "{{ podman_subid.stdout_lines | default([]) }}"
+    podman_subid_answer: "{{ (podman_subid.stdout_lines | default(['']))[0] | default('') }}"
+    podman_subid_answers:
+      - OK
+      - ADD
+      - CONFLICT
+      - SMALL
+      - MISMATCH
+      - HALF
+      - MULTI
+      - NOFREE
+      - BADARG
+      - BADLINE
+
+- name: The plan is split into its parts
+  ansible.builtin.set_fact:
+    podman_subid_status: "{{ podman_subid.stdout_lines[0] }}"
+    podman_subid_action: >-
+      {{ 'none' if podman_subid_answer == 'OK'
+         else ('add' if podman_subid_answer == 'ADD' else 'repair') }}
+    podman_subid_removals: >-
+      {{ podman_subid.stdout_lines[1:] | default([])
+         | select('match', '^REMOVE ') | list }}
+    podman_subid_plan: >-
+      {{ podman_subid.stdout_lines[1:] | default([])
+         | select('match', '^PLAN ') | list }}
+  vars:
+    podman_subid_answer: "{{ podman_subid.stdout_lines[0].split(' ')[0] }}"
+
+- name: The range the run would declare is computed
+  ansible.builtin.set_fact:
+    # A range is written `start-end`, and the plan counts it: the last UID is
+    # `start + count - 1`, not `count`.
+    podman_subid_range: >-
+      {%- set chosen = (podman_subid_plan[0].split(' ')
+                        if podman_subid_action != 'none'
+                        else podman_subid_status.split(' ')) -%}
+      {{ chosen[1] }}-{{ (chosen[1] | int) + (chosen[2] | int) - 1 }}
+  when: podman_subid_action == 'none' or podman_subid_plan | length > 0
+
+# The answer names the state, so a site reads a repair instruction rather than a
+# status code. The role never rewrites another account's ranges on a host it
+# does not own; `podman_subuid_repair` is that decision, taken by the site.
+- name: An unusable answer is refused unless the repair is declared
+  ansible.builtin.assert:
+    that:
+      - podman_subid_action in ['none', 'add'] or (podman_subuid_repair | bool)
+      - podman_subid_action != 'repair' or podman_subid_plan | length > 0
+    fail_msg: >-
+      {{ podman_user }}: `{{ podman_subid_status }}` in
+      `{{ podman_subuid_file }}` and `{{ podman_subgid_file }}`. Declare
+      `podman_subuid_repair: true` to remove this account's unusable ranges and
+      add the free block the plan names, or repair the two files yourself.
+      CONFLICT means this account holds a range another account also holds;
+      ADD is a free block the plan computed and never overwrites.
+    quiet: true

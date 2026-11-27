@@ -15,6 +15,48 @@
       declare `container_host_edition: server` in the host's variables.
     quiet: true
 
+# The role names Debian paths, Debian packages and a Debian kernel setting, so
+# it refuses another base before it writes anything.
+#
+# The base release is read from `/etc/debian_version`, not from
+# `ansible_distribution_major_version`: an edition brands `/etc/os-release`
+# (the Workstation Edition declares its own), and the version fact would read that
+# branding instead of the release both editions keep as Debian (measured on a
+# Debian 13 host whose edition brands it: `/etc/debian_version` = 13.7).
+- name: The base release is read
+  ansible.builtin.slurp:
+    src: /etc/debian_version
+  register: podman_debian_version
+  check_mode: false
+  failed_when: false
+
+- name: The cgroup hierarchy is read
+  ansible.builtin.command:  # noqa: command-instead-of-module
+    cmd: stat -fc %T /sys/fs/cgroup
+  register: podman_cgroup_type
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+# Quadlet needs cgroup v2, and rootless Podman needs a user namespace. Both are
+# read here rather than discovered later as a container that never starts.
+- name: The host carries the base this collection supports
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.system == 'Linux'
+      - ansible_facts.os_family == 'Debian'
+      - ansible_facts.service_mgr == 'systemd'
+      - (podman_debian_version.content | default('') | b64decode | trim).split('.')[0] == '13'
+      - podman_cgroup_type.stdout | default('') | trim == 'cgroup2fs'
+    fail_msg: >-
+      {{ inventory_hostname }} is not a Debian 13 host with systemd and cgroup
+      v2 ({{ ansible_facts.distribution }}
+      {{ ansible_facts.distribution_version }}, {{ ansible_facts.service_mgr }},
+      cgroup {{ podman_cgroup_type.stdout | default('?') | trim }}). The
+      engine's paths, its packages, the unprivileged user namespace setting and
+      the Quadlet generator are Debian's.
+    quiet: true
+
 - name: The rootless Podman engine is configured
   when: podman_enabled | bool
   block:
@@ -43,11 +85,45 @@
         podman_uid: "{{ ansible_facts.getent_passwd[podman_user][1] }}"
         podman_home: "{{ ansible_facts.getent_passwd[podman_user][4] }}"
 
+    # Linger comes before anything that runs as the account: `podman system
+    # migrate` and `podman unshare` need `XDG_RUNTIME_DIR` (`/run/user/<uid>`),
+    # which exists only while the account's user manager runs. A host without
+    # `pam_systemd` in the `sudo` stack does not create it on `become`, so the
+    # role starts the manager itself and waits for the directory (measured on
+    # a Debian 13 host: the commands fail with `lstat … no such file or directory`
+    # until `/run/user/<uid>` exists).
+    - name: The user manager may run without a login
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: "loginctl enable-linger {{ podman_user }}"
+        creates: "/var/lib/systemd/linger/{{ podman_user }}"
+      when: podman_linger | bool and not ansible_check_mode
+
+    - name: The account's runtime directory exists
+      ansible.builtin.wait_for:
+        path: "/run/user/{{ podman_uid }}"
+        timeout: 30
+      when: podman_linger | bool and not ansible_check_mode
+
     - name: The engine packages are present
       ansible.builtin.apt:
         name: "{{ podman_packages }}"
         state: present
         cache_valid_time: 3600
+
+    - name: The container configuration directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - "{{ podman_registries_dir }}"
+        - "{{ podman_containers_dir }}"
+        # The sysctl drop-in may be relocated (a sandbox keeps it under /var/tmp);
+        # its parent is not one of the engine's directories, so it is created
+        # here rather than assumed.
+        - "{{ podman_userns_sysctl | dirname }}"
 
     - name: The user namespace setting rootless Podman needs is declared
       ansible.builtin.copy:
@@ -90,17 +166,6 @@
           cannot clone its namespace. Check {{ podman_userns_sysctl }} and run
           `/usr/sbin/sysctl --system`.
 
-    - name: The container configuration directories exist
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: directory
-        owner: root
-        group: root
-        mode: "0755"
-      loop:
-        - "{{ podman_registries_dir }}"
-        - "{{ podman_containers_dir }}"
-
     # Tagged (here and on the task in `stale.yml`, because a tag on an include
     # is not inherited) so a fixture can reach the removal with
     # `--tags registries --check`. A real tag-only run is not supported: the
@@ -127,53 +192,8 @@
         mode: "0644"
       notify: Restart the rootless Podman socket
 
-    - name: The subordinate UID range is read
-      ansible.builtin.command:  # noqa: command-instead-of-module
-        argv:
-          - grep
-          - -E
-          - "^{{ podman_user }}:"
-          - /etc/subuid
-      register: podman_subuid
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: The subordinate GID range is read
-      ansible.builtin.command:  # noqa: command-instead-of-module
-        argv:
-          - grep
-          - -E
-          - "^{{ podman_user }}:"
-          - /etc/subgid
-      register: podman_subgid
-      changed_when: false
-      failed_when: false
-      check_mode: false
-
-    - name: The subordinate ID ranges are coherent
-      ansible.builtin.assert:
-        that:
-          - (podman_subuid.stdout | length > 0) == (podman_subgid.stdout | length > 0)
-        fail_msg: >-
-          {{ podman_user }} has only one of /etc/subuid and /etc/subgid. Repair
-          the account's subordinate ID ranges before enabling Podman.
-
-    - name: The subordinate ID ranges are declared
-      ansible.builtin.command:  # noqa: command-instead-of-module
-        cmd: >-
-          usermod
-          --add-subuids {{ podman_subuid_start }}-{{ podman_subuid_start + podman_subuid_count - 1 }}
-          --add-subgids {{ podman_subuid_start }}-{{ podman_subuid_start + podman_subuid_count - 1 }}
-          {{ podman_user }}
-      when: podman_subuid.stdout | length == 0
-      changed_when: true
-
-    - name: The user manager may run without a login
-      ansible.builtin.command:  # noqa: command-instead-of-module
-        cmd: "loginctl enable-linger {{ podman_user }}"
-        creates: "/var/lib/systemd/linger/{{ podman_user }}"
-      when: podman_linger | bool and not ansible_check_mode
+    - name: The subordinate ID ranges are planned before they are written
+      ansible.builtin.include_tasks: subuid.yml
 
     - name: The user socket has a running user manager
       ansible.builtin.assert:

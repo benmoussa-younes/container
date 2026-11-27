@@ -12,8 +12,9 @@ secret remain the site's. It is a capability, not an edition: it reads
 ansible-lint playbooks roles
 yamllint -c .yamllint roles playbooks inventories
 reuse lint
-scripts check tools/scripts/binaries/gate.scs
-scripts run tools/scripts/binaries/gate.scs      # one VERDICT line, exit 0/1
+scripts check --deny-warnings tools/scripts/binaries/gate.scs
+scripts check --module --deny-warnings tools/scripts/modules/*.scs
+scripts run --no-warnings tools/scripts/binaries/gate.scs  # one VERDICT line, exit 0/1
 ```
 
 The gate is the repository's single entry point: the tree, the version, the
@@ -40,7 +41,7 @@ podman build -t localhost/benmoussa/container:0.1.0 images/base
 
 ## Repository facts
 
-- The collection is `benmoussa.container`, version `0.2.0`.
+- The collection is `benmoussa.container`, version `0.3.0`.
 - The product code is `AGPL-3.0-or-later`; the documentation is
   `CC-BY-SA-4.0`. The base image's Debian packages keep their own licences.
 - A release is a signed tag `v<version>` and three assets: the collection

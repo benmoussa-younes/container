@@ -102,11 +102,57 @@ argument_specs:
       podman_subuid_start:
         type: int
         required: false
-        description: The first subordinate UID/GID of the account.
+        description: >-
+          The first subordinate UID/GID block the plan may use. The plan walks
+          `podman_subuid_start + k * podman_subuid_count` until a block is free
+          in both files.
       podman_subuid_count:
         type: int
         required: false
-        description: The number of subordinate UIDs/GIDs.
+        description: The number of subordinate UIDs and GIDs the account needs.
+      podman_subuid_file:
+        type: str
+        required: false
+        description: >-
+          The subordinate UID file the plan reads. `usermod` always writes the
+          system `/etc/subuid`, so this variable relocates the read, not the
+          write: it serves a fixture, never a second engine file.
+      podman_subgid_file:
+        type: str
+        required: false
+        description: >-
+          The subordinate GID file the plan reads. `usermod` always writes the
+          system `/etc/subgid`, as `podman_subuid_file` explains.
+      podman_subid_passwd_file:
+        type: str
+        required: false
+        description: >-
+          The account file the plan reads: a candidate block may not contain a
+          UID this file declares, or the block would map that account's own UID
+          into every container.
+      podman_subid_group_file:
+        type: str
+        required: false
+        description: The group file the plan reads, with the same rule as `podman_subid_passwd_file`.
+      podman_subid_nsswitch_file:
+        type: str
+        required: false
+        description: >-
+          The name-service file the plan reads to refuse a host that delegates
+          subordinate IDs to an NSS provider, which the plan cannot see.
+      podman_subuid_repair:
+        type: bool
+        required: false
+        description: >-
+          Whether the role may remove this account's unusable ranges and add the
+          free block the plan names. False fails the run instead, so a host the
+          product does not own keeps its identifiers untouched.
+      podman_system_migrate:
+        type: bool
+        required: false
+        description: >-
+          Whether `podman system migrate` runs as the owning account after the
+          ranges change, so its pause process adopts the new mapping.
       podman_verify:
         type: bool
         required: false
