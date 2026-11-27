@@ -20,9 +20,9 @@
 #
 # The base release is read from `/etc/debian_version`, not from
 # `ansible_distribution_major_version`: an edition brands `/etc/os-release`
-# (`VERSION_ID="1.0"` on the workstation), and the version fact would read that
-# branding instead of the release both editions keep as Debian (measured on the
-# workstation, `/etc/debian_version` = 13.7).
+# (the Workstation Edition declares its own), and the version fact would read that
+# branding instead of the release both editions keep as Debian (measured on a
+# Debian 13 host whose edition brands it: `/etc/debian_version` = 13.7).
 - name: The base release is read
   ansible.builtin.slurp:
     src: /etc/debian_version
@@ -90,7 +90,7 @@
     # which exists only while the account's user manager runs. A host without
     # `pam_systemd` in the `sudo` stack does not create it on `become`, so the
     # role starts the manager itself and waits for the directory (measured on
-    # the workstation: the commands fail with `lstat … no such file or directory`
+    # a Debian 13 host: the commands fail with `lstat … no such file or directory`
     # until `/run/user/<uid>` exists).
     - name: The user manager may run without a login
       ansible.builtin.command:  # noqa: command-instead-of-module

@@ -25,8 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read back and asserted against the planned block.
 - `podman`: the host's base is asserted before anything is written (Debian 13
   read from `/etc/debian_version`, systemd, cgroup v2). The edition brands
-  `/etc/os-release`, so `ansible_distribution_version` reads `1.0` on the
-  workstation and is not used.
+  `/etc/os-release`, so `ansible_distribution_version` reads the edition's own
+  `1.0` and is not used.
 - `podman`: `catatonit` is installed. The Quadlet default `RunInit=true` needs it
   and Debian lists it as a *Recommends* of `podman`, so a host that installs no
   recommends started no container.
@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   host UID inside the candidate block and a malformed line), and
   `tests/playbooks/subid.yml` runs the role's own decision tasks and both
   refusals without root. `tests/inventories/sandbox/` converges the collection
-  on the workstation with its configuration relocated under `/tmp`.
+  on the test host with its configuration relocated under `/var/tmp`.
 - gate: every defect line carries at most ten lines of a failed command's output.
 - gate and CI: `scripts check --deny-warnings`, `--module` for the modules, and
   `scripts run --no-warnings` for the gate.

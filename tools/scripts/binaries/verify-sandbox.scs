@@ -1,5 +1,5 @@
 #!/usr/bin/scripts run
-# verify-sandbox.scs — converge the collection on this workstation and read it
+# verify-sandbox.scs — converge the collection on the test host and read it
 # back, without touching the real engine's configuration.
 #
 #   ANSIBLE_BECOME_PASSWORD_FILE=~/.ansible/become scripts run tools/scripts/binaries/verify-sandbox.scs
@@ -11,8 +11,8 @@
 #
 #   sudo useradd --create-home --shell /usr/sbin/nologin ctr-sandbox
 #
-# The engine's configuration is relocated under `/tmp/opencode/container-sandbox`
-# by `tests/inventories/sandbox/hosts.yml`, so the workstation's own
+# The engine's configuration is relocated under `/var/tmp/container-sandbox`
+# by `tests/inventories/sandbox/hosts.yml`, so the host's own
 # `/etc/containers` is never written. The one host-level change is the sandbox
 # account's own identifiers, its linger file and its user socket.
 #
@@ -41,7 +41,7 @@ function first_lines(text: string, limit: integer) -> string {
 }
 
 # The recap names every counter on one line:
-#   desktop-sandbox : ok=12 changed=0 unreachable=0 failed=0 …
+#   sandbox : ok=12 changed=0 unreachable=0 failed=0 …
 function counter(recap: string, name: string) -> string {
     for part in recap.split(" ") {
         let halves = part.split("=")
@@ -69,7 +69,7 @@ function playbook(root: path, arguments: list<string>, label: string) -> map<str
         ok(completed) => {
             outcome["exit"] = "{completed.exit_code}"
             for line in completed.standard_output.lines() {
-                if line.starts_with("desktop-sandbox") and line.contains("changed=") {
+                if line.starts_with("sandbox") and line.contains("changed=") {
                     outcome["recap"] = line.trim_whitespace()
                 }
             }

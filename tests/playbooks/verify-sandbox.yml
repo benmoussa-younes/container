@@ -6,7 +6,7 @@
   become: true
   gather_facts: false
   vars:
-    podman_sandbox: /tmp/opencode/container-sandbox
+    podman_sandbox: /var/tmp/container-sandbox
   tasks:
     - name: The owning account is read
       ansible.builtin.getent:
@@ -106,7 +106,7 @@
         label: "{{ item.item }}"
 
     # `getent subuid` does not exist on Debian: glibc has no subid database, and
-    # shadow-utils ships `getsubids` instead (measured on the workstation).
+    # shadow-utils ships `getsubids` instead (measured on Debian 13: glibc has no subid database).
     - name: The account's declared ranges are read
       ansible.builtin.command:  # noqa: command-instead-of-module
         cmd: "getsubids {{ item.flag }} {{ podman_user }}"
