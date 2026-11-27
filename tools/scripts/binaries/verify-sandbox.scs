@@ -1,0 +1,134 @@
+#!/usr/bin/scripts run
+# verify-sandbox.scs — converge the collection on this workstation and read it
+# back, without touching the real engine's configuration.
+#
+#   ANSIBLE_BECOME_PASSWORD_FILE=~/.ansible/become scripts run tools/scripts/binaries/verify-sandbox.scs
+#
+# It needs root, which the owner gives: every `ansible-playbook` call runs
+# `become: true` on `localhost`, and `ANSIBLE_BECOME_PASSWORD_FILE` (or
+# `--ask-become-pass` forwarded after `--`) supplies the password. The sandbox
+# account must already exist:
+#
+#   sudo useradd --create-home --shell /usr/sbin/nologin ctr-sandbox
+#
+# The engine's configuration is relocated under `/tmp/opencode/container-sandbox`
+# by `tests/inventories/sandbox/hosts.yml`, so the workstation's own
+# `/etc/containers` is never written. The one host-level change is the sandbox
+# account's own identifiers, its linger file and its user socket.
+#
+# The proof has three parts: the first converge must succeed, the second must
+# change nothing, and the read-back asks the machine. It does not prove Quadlet
+# (no unit is declared) and it does not prove a reboot.
+
+import "../modules/verdict.scs" as verdict
+import "../modules/repo.scs" as repo
+
+let root: path = repo.root_path_from(process.script_path())
+let inventory = "tests/inventories/sandbox/hosts.yml"
+
+# Ten lines, like the gate: a failed converge names its first defects and stops.
+function first_lines(text: string, limit: integer) -> string {
+    let mutable kept: list<string> = []
+    for line in text.lines() {
+        if kept.length() >= limit {
+            break
+        }
+        if line.trim_whitespace().length() > 0 {
+            kept.append(line)
+        }
+    }
+    return kept.join("\n")
+}
+
+# The recap names every counter on one line:
+#   desktop-sandbox : ok=12 changed=0 unreachable=0 failed=0 …
+function counter(recap: string, name: string) -> string {
+    for part in recap.split(" ") {
+        let halves = part.split("=")
+        if halves.get_at_index(0).value_or("") == name and halves.length() > 1 {
+            return halves.get_at_index(1).value_or("")
+        }
+    }
+    return ""
+}
+
+function playbook(root: path, arguments: list<string>, label: string) -> map<string, string> {
+    let mutable extra: list<string> = []
+    for argument in process.arguments() {
+        # A dry run would make both converges change nothing and the idempotence
+        # proof would be empty.
+        if argument == "--check" or argument == "--diff" or argument == "--syntax-check" {
+            io.write_standard_error_line("verify-sandbox: {argument} would fake the proof; run a real converge")
+            process.exit_with_code(2)
+        }
+        extra.append(argument)
+    }
+    let request = process.request("ansible-playbook", ["-i", inventory] + arguments + extra)
+    let mutable outcome = {"exit": "?", "recap": ""}
+    match process.run(request.with_working_directory(root)) {
+        ok(completed) => {
+            outcome["exit"] = "{completed.exit_code}"
+            for line in completed.standard_output.lines() {
+                if line.starts_with("desktop-sandbox") and line.contains("changed=") {
+                    outcome["recap"] = line.trim_whitespace()
+                }
+            }
+            if completed.exit_code != 0 {
+                io.write_standard_error_line("{label}: exit {completed.exit_code}")
+                io.write_standard_error_line(first_lines(completed.standard_error + "\n" + completed.standard_output, 10))
+            }
+        }
+        error(failure) => {
+            outcome["exit"] = "255"
+            io.write_standard_error_line("{label}: cannot run ansible-playbook: {failure.kind}")
+        }
+    }
+    return outcome
+}
+
+let mutable failures: list<string> = []
+
+# The second converge is the idempotence proof: a first run may legitimately
+# change nothing when the sandbox already converged, so only the second is
+# required to.
+let first = playbook(root, ["playbooks/site.yml"], "first converge")
+if first["exit"] == "0" {
+    io.write_standard_output_line("PASS first converge " + first["recap"])
+} else {
+    let line = verdict.defect("first converge", "FAIL", "exit " + first["exit"])
+    io.write_standard_output_line(line)
+    failures.append(line)
+}
+
+if failures.length() == 0 {
+    let second = playbook(root, ["playbooks/site.yml"], "second converge")
+    if second["exit"] != "0" {
+        let line = verdict.defect("second converge", "FAIL", "exit " + second["exit"])
+        io.write_standard_output_line(line)
+        failures.append(line)
+    } else if counter(second["recap"], "changed") != "0" {
+        let line = verdict.defect("second converge is idempotent", "FAIL", second["recap"])
+        io.write_standard_output_line(line)
+        failures.append(line)
+    } else {
+        io.write_standard_output_line("PASS second converge is idempotent " + second["recap"])
+    }
+}
+
+if failures.length() == 0 {
+    let checks = playbook(root, ["tests/playbooks/verify-sandbox.yml"], "sandbox read-back")
+    if checks["exit"] == "0" {
+        io.write_standard_output_line("PASS sandbox read-back")
+    } else {
+        let line = verdict.defect("sandbox read-back", "FAIL", "exit " + checks["exit"])
+        io.write_standard_output_line(line)
+        failures.append(line)
+    }
+}
+
+if failures.length() == 0 {
+    io.write_standard_output_line(verdict.line(true))
+    process.exit_with_code(verdict.code(true))
+}
+io.write_standard_output_line(verdict.line(false))
+process.exit_with_code(verdict.code(false))

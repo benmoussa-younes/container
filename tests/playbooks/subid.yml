@@ -1,0 +1,270 @@
+---
+# Proves the decision half of `roles/podman` without root.
+#
+# `subuid-plan.yml` reads `/etc/subuid` and `/etc/subgid` as data: the files are
+# variables, so the fixtures under `tests/fixtures/subid/` exercise the answers a
+# real host produces. The play also proves the refusals, which matter more than
+# the happy path: a conflicting range must fail the run rather than be rewritten.
+#
+# A refusal is proven by catching it and reading the message it carried
+# (`ansible_failed_result.msg`), never by a `fail` placed in the block: a
+# deliberate `fail` would be caught by the same `rescue` and the test would pass
+# even if the role refused nothing.
+- name: A usable range changes nothing
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    podman_user: alice
+    podman_subuid_start: 100000
+    podman_subuid_count: 65536
+    podman_subuid_repair: false
+    podman_subid_nsswitch_file: "{{ playbook_dir }}/../fixtures/subid/nsswitch-files.conf"
+    podman_subid_passwd_file: "{{ playbook_dir }}/../fixtures/subid/passwd"
+    podman_subid_group_file: "{{ playbook_dir }}/../fixtures/subid/group"
+    podman_subuid_file: "{{ playbook_dir }}/../fixtures/subid/ok.subuid"
+    podman_subgid_file: "{{ playbook_dir }}/../fixtures/subid/ok.subgid"
+  tasks:
+    - name: The plan is computed
+      ansible.builtin.include_role:
+        name: podman
+        tasks_from: subuid-plan.yml
+
+    - name: The plan asks for nothing
+      ansible.builtin.assert:
+        that:
+          - podman_subid_status == 'OK 100000 65536'
+          - podman_subid_action == 'none'
+          - podman_subid_plan | length == 0
+          - podman_subid_removals | length == 0
+          - podman_subid_range == '100000-165535'
+
+- name: An absent account gets the first free block, and the block to add
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    podman_user: alice
+    podman_subuid_start: 100000
+    podman_subuid_count: 65536
+    podman_subuid_repair: false
+    podman_subid_nsswitch_file: "{{ playbook_dir }}/../fixtures/subid/nsswitch-files.conf"
+    podman_subid_passwd_file: "{{ playbook_dir }}/../fixtures/subid/passwd"
+    podman_subid_group_file: "{{ playbook_dir }}/../fixtures/subid/group"
+    podman_subuid_file: "{{ playbook_dir }}/../fixtures/subid/add-gap.subuid"
+    podman_subgid_file: "{{ playbook_dir }}/../fixtures/subid/add-gap.subgid"
+  tasks:
+    - name: The plan is computed
+      ansible.builtin.include_role:
+        name: podman
+        tasks_from: subuid-plan.yml
+
+    - name: The plan names the hole the two files leave
+      ansible.builtin.assert:
+        that:
+          - podman_subid_status == 'ADD 165536 65536'
+          - podman_subid_action == 'add'
+          - podman_subid_removals | length == 0
+          - podman_subid_plan | length == 1
+          - podman_subid_plan[0] == 'PLAN 165536 65536'
+          - podman_subid_range == '165536-231071'
+
+# The plan of a conflicting range must stop the include, and stop it for that
+# reason: the rescue reads the message the assert carried.
+- name: A conflicting range is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    podman_user: alice
+    podman_subuid_start: 100000
+    podman_subuid_count: 65536
+    podman_subuid_repair: false
+    podman_subid_nsswitch_file: "{{ playbook_dir }}/../fixtures/subid/nsswitch-files.conf"
+    podman_subid_passwd_file: "{{ playbook_dir }}/../fixtures/subid/passwd"
+    podman_subid_group_file: "{{ playbook_dir }}/../fixtures/subid/group"
+    podman_subuid_file: "{{ playbook_dir }}/../fixtures/subid/conflict.subuid"
+    podman_subgid_file: "{{ playbook_dir }}/../fixtures/subid/conflict.subgid"
+  tasks:
+    - name: The plan of a conflicting range fails the run
+      block:
+        - name: The plan is computed
+          ansible.builtin.include_role:
+            name: podman
+            tasks_from: subuid-plan.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: the plan accepted a range another account also holds"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            podman_subid_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: The run failed on the conflict, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in podman_subid_refusal"
+          - "'CONFLICT 100000 65536 bob' in podman_subid_refusal"
+          - "'podman_subuid_repair' in podman_subid_refusal"
+        fail_msg: "{{ podman_subid_refusal | default('the include did not fail') }}"
+
+- name: A conflict is repaired only when the site asks for it
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    podman_user: alice
+    podman_subuid_start: 100000
+    podman_subuid_count: 65536
+    podman_subuid_repair: true
+    podman_subid_nsswitch_file: "{{ playbook_dir }}/../fixtures/subid/nsswitch-files.conf"
+    podman_subid_passwd_file: "{{ playbook_dir }}/../fixtures/subid/passwd"
+    podman_subid_group_file: "{{ playbook_dir }}/../fixtures/subid/group"
+    podman_subuid_file: "{{ playbook_dir }}/../fixtures/subid/conflict.subuid"
+    podman_subgid_file: "{{ playbook_dir }}/../fixtures/subid/conflict.subgid"
+  tasks:
+    - name: The plan is computed
+      ansible.builtin.include_role:
+        name: podman
+        tasks_from: subuid-plan.yml
+
+    - name: The plan names both removals and the replacement block
+      ansible.builtin.assert:
+        that:
+          - podman_subid_action == 'repair'
+          - podman_subid_removals | length == 2
+          - "'REMOVE uid 100000 65536' in podman_subid_removals"
+          - "'REMOVE gid 100000 65536' in podman_subid_removals"
+          - podman_subid_plan | length == 1
+          - podman_subid_plan[0] == 'PLAN 165536 65536'
+          - podman_subid_range == '165536-231071'
+
+- name: A host that delegates subordinate IDs is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    podman_user: alice
+    podman_subuid_start: 100000
+    podman_subuid_count: 65536
+    podman_subuid_repair: true
+    podman_subid_nsswitch_file: "{{ playbook_dir }}/../fixtures/subid/nsswitch-sss.conf"
+    podman_subuid_file: "{{ playbook_dir }}/../fixtures/subid/ok.subuid"
+    podman_subgid_file: "{{ playbook_dir }}/../fixtures/subid/ok.subgid"
+  tasks:
+    - name: The plan of an NSS-backed host fails the run
+      block:
+        - name: The plan is computed
+          ansible.builtin.include_role:
+            name: podman
+            tasks_from: subuid-plan.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: the plan accepted a host whose identifiers come from an NSS provider"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            podman_subid_nss_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: The run failed on the delegated identifiers, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in podman_subid_nss_refusal"
+          - "'subid: files sss' in podman_subid_nss_refusal"
+        fail_msg: "{{ podman_subid_nss_refusal | default('the include did not fail') }}"
+
+- name: An invocation that cannot produce a safe block is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    podman_user: alice
+    podman_subuid_start: 0
+    podman_subuid_count: 65536
+    podman_subuid_repair: true
+    podman_subid_nsswitch_file: "{{ playbook_dir }}/../fixtures/subid/nsswitch-files.conf"
+    podman_subid_passwd_file: "{{ playbook_dir }}/../fixtures/subid/passwd"
+    podman_subid_group_file: "{{ playbook_dir }}/../fixtures/subid/group"
+    podman_subuid_file: "{{ playbook_dir }}/../fixtures/subid/badarg-base.subuid"
+    podman_subgid_file: "{{ playbook_dir }}/../fixtures/subid/badarg-base.subgid"
+  tasks:
+    - name: The plan of a base that would map host root fails the run
+      block:
+        - name: The plan is computed
+          ansible.builtin.include_role:
+            name: podman
+            tasks_from: subuid-plan.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: the plan accepted a base of 0"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            podman_subid_base_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: The run failed on the base, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in podman_subid_base_refusal"
+          - "'BADARG base' in podman_subid_base_refusal"
+        fail_msg: "{{ podman_subid_base_refusal | default('the include did not fail') }}"
+
+# The apply half must at least render: `check_mode` skips the commands but their
+# arguments are still templated, and a task that indexes a plan the answer does
+# not carry fails the run here, before any host is touched.
+- name: The apply path renders in check mode
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  check_mode: true
+  vars:
+    podman_user: alice
+    podman_uid: 0
+    podman_home: /tmp
+    podman_subuid_start: 100000
+    podman_subuid_count: 65536
+    podman_subuid_repair: false
+    podman_linger: false
+    podman_verify: false
+    podman_system_migrate: false
+    podman_subid_nsswitch_file: "{{ playbook_dir }}/../fixtures/subid/nsswitch-files.conf"
+    podman_subid_passwd_file: "{{ playbook_dir }}/../fixtures/subid/passwd"
+    podman_subid_group_file: "{{ playbook_dir }}/../fixtures/subid/group"
+    podman_subuid_file: "{{ playbook_dir }}/../fixtures/subid/add-gap.subuid"
+    podman_subgid_file: "{{ playbook_dir }}/../fixtures/subid/add-gap.subgid"
+  tasks:
+    - name: The apply half is rendered
+      ansible.builtin.include_role:
+        name: podman
+        tasks_from: subuid.yml
+
+    - name: The rendered apply names the block it would add
+      ansible.builtin.assert:
+        that:
+          - podman_subid_action == 'add'
+          - podman_subid_range == '165536-231071'
+
+# `/proc/self/uid_map` writes its three columns padded (`         1     100000
+#      65536`); the role normalises them before comparing with the block the plan
+# promised. This play proves the transformation on the exact shape the kernel
+# returns, so a change to the comparison is caught without root.
+- name: The kernel's padded map lines are normalised
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    podman_kernel_map: "         1     100000      65536"
+  tasks:
+    - name: The padded line is normalised
+      ansible.builtin.set_fact:
+        podman_normalised: >-
+          {{ [podman_kernel_map] | map('trim') | map('regex_replace', ' +', ' ') | list }}
+
+    - name: The normalised line names the planned block
+      ansible.builtin.assert:
+        that:
+          - "'1 100000 65536' in podman_normalised"
+          - podman_kernel_map not in podman_normalised

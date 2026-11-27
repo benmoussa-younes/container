@@ -5,6 +5,58 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-27
+
+### Added
+
+- `podman`: the subordinate ID ranges are planned before they are written, by
+  `roles/podman/files/subid-plan.awk`. The plan refuses a range another account
+  holds, a range shorter than `podman_subuid_count`, a range in one file only,
+  two ranges in one file, and a host that delegates `subid` to an NSS provider;
+  it adds the first free block at or after `podman_subuid_start` when the account
+  has none, and it never overwrites. A candidate must also avoid every UID and
+  GID that `/etc/passwd` and `/etc/group` declare, and the count is capped at
+  1 048 576.
+- `podman`: `podman_subuid_repair` (false by default) is the one repair the role
+  accepts: it removes this account's unusable ranges, then adds the block the
+  plan names.
+- `podman`: `podman_system_migrate` runs `podman system migrate` as the owning
+  account after a change, and the kernel's `/proc/self/uid_map` and `gid_map` are
+  read back and asserted against the planned block.
+- `podman`: the host's base is asserted before anything is written (Debian 13
+  read from `/etc/debian_version`, systemd, cgroup v2). The edition brands
+  `/etc/os-release`, so `ansible_distribution_version` reads `1.0` on the
+  workstation and is not used.
+- `podman`: `catatonit` is installed. The Quadlet default `RunInit=true` needs it
+  and Debian lists it as a *Recommends* of `podman`, so a host that installs no
+  recommends started no container.
+- gate: the planner is proven against fourteen fixture host states (including a
+  host UID inside the candidate block and a malformed line), and
+  `tests/playbooks/subid.yml` runs the role's own decision tasks and both
+  refusals without root. `tests/inventories/sandbox/` converges the collection
+  on the workstation with its configuration relocated under `/tmp`.
+- gate: every defect line carries at most ten lines of a failed command's output.
+- gate and CI: `scripts check --deny-warnings`, `--module` for the modules, and
+  `scripts run --no-warnings` for the gate.
+
+### Fixed
+
+- a subordinate range that another account also held was accepted in silence,
+  while `roles/podman/defaults/main.yml` and `SECURITY.md` claimed a collision
+  was a hard failure;
+- `usermod` was called with the same hard-coded 100000 block for every account,
+  so two engines on one host collided;
+- nothing read back the mapping the kernel installed, so a file the engine
+  ignored passed the run;
+- `release.scs` computed its program name in a helper, which raised
+  `SCRIPTS-LINT-0004`; each call site now passes a literal `run_request`.
+
+### Changed
+
+- `SECURITY.md` states the mechanisms that actually isolate a container (no LSM
+  confines a rootless container on Debian 13) and the risk of the socket the
+  role enables.
+
 ## [0.2.0] - 2026-11-21
 
 ### Added
@@ -95,6 +147,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The configuration drop-ins are named `99-container-podman.conf`, so the
   collection does not collide with a site's own Podman configuration.
 
-[Unreleased]: https://github.com/benmoussa-younes/container/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/benmoussa-younes/container/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.3.0
 [0.2.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.2.0
 [0.1.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.1.0
