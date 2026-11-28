@@ -47,6 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `podman`: `container_host_edition` now accepts `workstation` as well as
+  `server`. A workstation installs the same rootless engine and the same
+  hardening for the dedicated account; a site that develops on it relaxes the
+  defaults it needs (`podman_read_only`, `quadlet_image_digest_required`, ...)
+  through the role's variables, so the edition stays a declared label and not a
+  second profile.
 - The base image moves to `debian:13-slim@sha256:8aa5a7bf…` (Debian 13.8, the
   OpenSSL 3.5.7→3.5.9 security delta), pins `apt` to the base's own
   `snapshot.debian.org` date, purges the volatile apt/dpkg logs and archives the

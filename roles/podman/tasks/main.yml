@@ -12,7 +12,8 @@
     fail_msg: >-
       container_host_edition is not declared. benmoussa.container owns no
       identity and installs on the edition the host already carries:
-      declare `container_host_edition: server` in the host's variables.
+      declare `container_host_edition: server` or `workstation` in the host's
+      variables.
     quiet: true
 
 # `podman info` and `podman unshare` need the account's runtime directory,

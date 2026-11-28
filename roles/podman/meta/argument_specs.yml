@@ -17,12 +17,15 @@ argument_specs:
       container_host_edition:
         type: str
         required: false
-        choices: [server]
+        choices: [server, workstation]
         description: >-
           The edition the host already carries. The collection owns no identity
           and writes none; it installs on an edition it does not choose, and it
-          refuses any value outside this list. `server` is the only edition it
-          supports today.
+          refuses any value outside this list. `server` and `workstation` are
+          supported: a workstation runs the same rootless engine and the same
+          hardening, and a site that develops on it relaxes the defaults it
+          needs (`podman_read_only`, `quadlet_image_digest_required`, ...)
+          rather than the edition selecting a different profile.
       podman_user:
         type: str
         required: false
