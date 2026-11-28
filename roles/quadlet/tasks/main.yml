@@ -7,6 +7,7 @@
       ansible.builtin.set_fact:
         quadlet_previous_dropins: {}
         quadlet_stale_dropins: []
+        quadlet_image_references: []
 
     - name: The owning account is declared
       ansible.builtin.assert:
@@ -87,6 +88,13 @@
       loop: "{{ quadlet_units }}"
       loop_control:
         label: "{{ item.name | default('?') }}"
+
+    - name: The declared image units are known
+      ansible.builtin.set_fact:
+        quadlet_image_stems: >-
+          {{ quadlet_units | selectattr('type', 'defined')
+             | selectattr('type', 'equalto', 'image')
+             | map(attribute='name') | list }}
 
     - name: The declarations are keyed once
       ansible.builtin.set_fact:
@@ -323,6 +331,34 @@
         - quadlet_forbidden_prefixes | length > 0
         - (item.0.state | default('present')) == 'present'
 
+    - name: The capabilities a unit re-adds are permitted
+      ansible.builtin.assert:
+        that:
+          - quadlet_forbidden_capabilities | length == 0
+        fail_msg: >-
+          `{{ item.name }}` re-adds capabilities the product does not permit
+          while the hardened defaults are on:
+          {{ quadlet_forbidden_capabilities | join(', ') }}. The global drop-in
+          drops every capability; `quadlet_permitted_capabilities` names the
+          only ones back.
+        quiet: true
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}"
+      vars:
+        quadlet_declared_capabilities: >-
+          {{ ((item.content | default('')) ~ '\n'
+              ~ (item.dropins | default([]) | map(attribute='content') | join('\n')))
+             | regex_findall('(?mi)^[ \t]*AddCapability[ \t]*=[ \t]*([^\n]+)')
+             | map('trim') | map('regex_replace', '[, \t]+', ' ') | join(' ')
+             | split() | map('upper') | list }}
+        quadlet_forbidden_capabilities: >-
+          {{ quadlet_declared_capabilities
+             | difference(quadlet_permitted_capabilities | map('upper') | list) }}
+      when:
+        - quadlet_hardened_defaults | bool
+        - (item.state | default('present')) == 'present'
+
     - name: Every declared image is pinned by digest
       ansible.builtin.assert:
         that:
@@ -354,6 +390,43 @@
         - (item.type | default('')) in ['container', 'image']
         - (item.state | default('present')) == 'present'
         - item.image_digest | default(true) | bool
+
+    - name: The .image references are collected
+      ansible.builtin.set_fact:
+        quadlet_image_references: >-
+          {{ (quadlet_image_references | default([]))
+             + (((item.content | default('')) ~ '\n'
+                 ~ (item.dropins | default([]) | map(attribute='content') | join('\n')))
+                | regex_findall('(?mi)^[ \t]*Image[ \t]*=[ \t]*([^\n]+)')
+                | map('trim') | select('search', '[.]image$') | list
+                | map('regex_replace', '[.]image$', '')) }}
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: (item.state | default('present')) == 'present'
+
+    - name: The .image reference is a declared unit or an existing file
+      ansible.builtin.stat:
+        path: "{{ quadlet_directory }}/{{ item }}.image"
+      loop: "{{ quadlet_image_references | default([]) | unique | list }}"
+      loop_control:
+        label: "{{ item }}.image"
+      register: quadlet_image_reference_files
+
+    - name: Every .image reference resolves
+      ansible.builtin.assert:
+        that:
+          - item.item is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*$')
+          - item.item in quadlet_image_stems or item.stat.exists
+        fail_msg: >-
+          `{{ item.item }}.image` is referenced by a declared unit but the
+          generator will refuse it: no `{{ item.item }}.image` unit is declared
+          and no `{{ quadlet_directory }}/{{ item.item }}.image` file exists.
+          Declare the image unit, write the file, or pin the image by digest.
+        quiet: true
+      loop: "{{ quadlet_image_reference_files.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item }}.image"
 
     - name: The declared units are written
       ansible.builtin.copy:

@@ -4,13 +4,18 @@
 # The container base image.
 #
 #   podman build \
+#     --timestamp 1795392000 \
 #     --build-arg VERSION="$(cat VERSION)" \
 #     --build-arg REVISION="$(git rev-parse HEAD)" \
-#     --build-arg CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+#     --build-arg CREATED="2026-11-23T00:00:00Z" \
 #     -t localhost/benmoussa/container:test images/base
 #
-# The base is Debian's minimal one, pinned by digest for reproducibility. The
-# image carries what a workload needs and nothing else: TLS roots, the zone
+# The base is Debian's minimal one, pinned by digest and by the snapshot it was
+# built from: `apt` reads snapshot.debian.org at the base's own timestamp, the
+# volatile apt/dpkg logs are removed and `--timestamp` fixes the image date, so
+# two `--no-cache` builds of the same commit produce one digest. `REFRESHED`
+# dates the snapshot; refresh it (digest, timestamp, date) on a schedule.
+# The image carries what a workload needs and nothing else: TLS roots, the zone
 # data `Timezone=` reads, `curl` for healthchecks, `procps` for a shell inside a
 # running container, and the Scripts interpreter the site's scripts run on. No
 # sshd, no sudo, no compiler, no package lists.
@@ -18,7 +23,7 @@
 # Scripts is a separate work under the GPL-3.0-or-later; the release package is
 # verified against the release's own SHA256SUMS before it is installed, and the
 # version is pinned here.
-FROM docker.io/library/debian:13-slim@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392
+FROM docker.io/library/debian:13-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0
 
 # The site passes these at build time; nothing here hardcodes the collection
 # version, so a release cannot leave a stale label behind. `CREATED` is the
@@ -36,7 +41,7 @@ LABEL org.opencontainers.image.title="Container base image" \
       org.opencontainers.image.source="https://github.com/benmoussa-younes/container" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later" \
       org.opencontainers.image.base.name="docker.io/library/debian:13-slim" \
-      org.opencontainers.image.base.digest="sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392"
+      org.opencontainers.image.base.digest="sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0"
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
@@ -44,7 +49,13 @@ ENV LANG=C.UTF-8 \
 # One layer: install and clean in the same step, so the package lists never
 # reach a layer of their own. The image keeps Debian's own `/etc/os-release`:
 # the collection owns no identity, so it writes none and brands no distribution.
-RUN apt-get update \
+# `Check-Valid-Until=false` is only safe because the snapshot is immutable; the
+# security suite of an immutable snapshot is otherwise reported as expired.
+RUN sed -i \
+      -e "s|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/20261123T000000Z|" \
+      -e "s|http://deb.debian.org/debian|http://snapshot.debian.org/archive/debian/20261123T000000Z|" \
+      /etc/apt/sources.list.d/debian.sources \
+ && apt-get update -o Acquire::Check-Valid-Until=false \
  && apt-get install -y --no-install-recommends \
       ca-certificates \
       tzdata \
@@ -57,6 +68,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends /tmp/scripts.deb \
  && rm -f /tmp/scripts.deb \
  && rm -rf /var/lib/apt/lists/* \
+ && rm -f /var/log/apt/history.log /var/log/apt/term.log /var/log/dpkg.log /var/cache/ldconfig/aux-cache \
  && /usr/bin/scripts --version
 
 # A setuid or setgid bit is useless once every capability is dropped, and it is
@@ -68,6 +80,11 @@ RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin app \
  && mkdir -p /work \
  && chown app:app /work \
  && find / -xdev -perm /6000 -type f -exec chmod ug-s {} +
+
+# The package set the image was built from, in the image and checked by the
+# site: the SBOM-lite that a scanner-free host can still read.
+RUN dpkg-query -W -f='${Package} ${Version} ${Architecture}\n' | sort > /usr/share/build-manifest.txt \
+ && sha256sum /usr/share/build-manifest.txt > /usr/share/build-manifest.sha256
 
 USER 1000:1000
 WORKDIR /work

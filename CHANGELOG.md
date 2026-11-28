@@ -47,6 +47,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The base image moves to `debian:13-slim@sha256:8aa5a7bf…` (Debian 13.8, the
+  OpenSSL 3.5.7→3.5.9 security delta), pins `apt` to the base's own
+  `snapshot.debian.org` date, purges the volatile apt/dpkg logs and archives the
+  `dpkg-query` package set in the image. With `--timestamp`, two `--no-cache`
+  builds of one commit produce the same digest (measured); `images/base/REFRESHED`
+  dates the snapshot and the gate refuses a base older than 30 days.
+- `quadlet`: `AddCapability` is bounded by `quadlet_permitted_capabilities`
+  (`CAP_NET_BIND_SERVICE` by default) and checked in a unit and its drop-ins:
+  the hardening drop-in drops every capability, and only a named one can come
+  back. `CAP_SYS_ADMIN` and the other administration capabilities fail the run.
 - `podman`: the README states what the enabled user socket grants (the
   account's engine rights) and that rootless Podman on Debian applies no
   AppArmor or SELinux layer (`podman info`: `apparmorEnabled=false`,
@@ -75,6 +85,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `podman`: `registries.conf` sets `short-name-mode = "enforcing"`
   (`podman_short_name_mode`), and the new `policy.json` accepts only the
   registries `podman_registries` declares.
+- `quadlet`: a declared `Image=` ending in `.image` must resolve at role run
+  time to a declared `type: image` unit or to a `<stem>.image` file in the
+  generator directory; an undeclared or path-shaped reference fails the run
+  instead of writing a unit the generator refuses.
 - `quadlet`: a declared `.container` or `.image` must name its image by digest
   (`@sha256:` and 64 hex characters), or reference a `.image` unit by name
   (`base.image`, whose own `Image=` is checked), while
