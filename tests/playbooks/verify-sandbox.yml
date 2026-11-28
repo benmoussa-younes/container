@@ -11,7 +11,30 @@
     - name: The owning account is read
       ansible.builtin.getent:
         database: passwd
-        key: "{{ podman_user }}"
+        key: "{{ account_name }}"
+
+    - name: The account's passwd entry is kept
+      ansible.builtin.set_fact:
+        account_sandbox_passwd: "{{ ansible_facts.getent_passwd[account_name] }}"
+
+    - name: The account carries the declared identity
+      ansible.builtin.assert:
+        that:
+          - account_sandbox_passwd[1] == account_uid | string
+          - account_sandbox_passwd[2] == account_gid | string
+          - account_sandbox_passwd[5] == account_shell
+        fail_msg: "{{ account_sandbox_passwd }}"
+
+    - name: The home directory is read
+      ansible.builtin.stat:
+        path: "{{ account_sandbox_passwd[4] }}"
+      register: account_sandbox_home
+
+    - name: The home directory belongs to the account
+      ansible.builtin.assert:
+        that:
+          - account_sandbox_home.stat.isdir | default(false)
+          - account_sandbox_home.stat.pw_name | default('') == account_name
 
     - name: The relocated engine configuration exists
       ansible.builtin.slurp:
@@ -41,7 +64,7 @@
 
     - name: The account lingers
       ansible.builtin.command:  # noqa: command-instead-of-module
-        cmd: "loginctl show-user {{ podman_user }} -p Linger"
+        cmd: "loginctl show-user {{ account_name }} -p Linger"
       register: podman_sandbox_linger
       changed_when: false
 
@@ -54,16 +77,16 @@
       ansible.builtin.command:  # noqa: command-instead-of-module
         cmd: systemctl --user is-active podman.socket
       become: true
-      become_user: "{{ podman_user }}"
+      become_user: "{{ account_name }}"
       environment:
         HOME: "{{ podman_sandbox_home }}"
-        USER: "{{ podman_user }}"
-        LOGNAME: "{{ podman_user }}"
+        USER: "{{ account_name }}"
+        LOGNAME: "{{ account_name }}"
         XDG_RUNTIME_DIR: "/run/user/{{ podman_sandbox_uid }}"
         DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ podman_sandbox_uid }}/bus"
       vars:
-        podman_sandbox_uid: "{{ ansible_facts.getent_passwd[podman_user][1] | default('') }}"
-        podman_sandbox_home: "{{ ansible_facts.getent_passwd[podman_user][4] | default('/') }}"
+        podman_sandbox_uid: "{{ ansible_facts.getent_passwd[account_name][1] | default('') }}"
+        podman_sandbox_home: "{{ ansible_facts.getent_passwd[account_name][4] | default('/') }}"
       register: podman_sandbox_socket
       changed_when: false
       failed_when: false
@@ -77,16 +100,16 @@
       ansible.builtin.command:  # noqa: command-instead-of-module
         cmd: "podman unshare cat {{ item }}"
       become: true
-      become_user: "{{ podman_user }}"
+      become_user: "{{ account_name }}"
       environment:
         HOME: "{{ podman_sandbox_home }}"
-        USER: "{{ podman_user }}"
-        LOGNAME: "{{ podman_user }}"
+        USER: "{{ account_name }}"
+        LOGNAME: "{{ account_name }}"
         XDG_RUNTIME_DIR: "/run/user/{{ podman_sandbox_uid }}"
         DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ podman_sandbox_uid }}/bus"
       vars:
-        podman_sandbox_uid: "{{ ansible_facts.getent_passwd[podman_user][1] | default('') }}"
-        podman_sandbox_home: "{{ ansible_facts.getent_passwd[podman_user][4] | default('/') }}"
+        podman_sandbox_uid: "{{ ansible_facts.getent_passwd[account_name][1] | default('') }}"
+        podman_sandbox_home: "{{ ansible_facts.getent_passwd[account_name][4] | default('/') }}"
       loop:
         - /proc/self/uid_map
         - /proc/self/gid_map
@@ -109,7 +132,7 @@
     # shadow-utils ships `getsubids` instead (measured on Debian 13: glibc has no subid database).
     - name: The account's declared ranges are read
       ansible.builtin.command:  # noqa: command-instead-of-module
-        cmd: "getsubids {{ item.flag }} {{ podman_user }}"
+        cmd: "getsubids {{ item.flag }} {{ account_name }}"
       loop:
         - { flag: "", name: uid }
         - { flag: "-g", name: gid }
@@ -131,7 +154,7 @@
           - podman_sandbox_mapped_lines.split()[1] == item.declared.stdout.split()[2]
           - podman_sandbox_mapped_lines.split()[2] == item.declared.stdout.split()[3]
         fail_msg: >-
-          getsubids {{ item.name }} {{ podman_user }}:
+          getsubids {{ item.name }} {{ account_name }}:
           {{ item.declared.stdout | default('nothing') }} ; map:
           {{ podman_sandbox_mapped_lines | default('nothing') }}
       loop:

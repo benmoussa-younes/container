@@ -1,0 +1,323 @@
+---
+- name: An empty account name is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    account_name: ""
+    account_uid: 1500
+    account_gid: 1500
+  tasks:
+    - name: The empty name fails the run
+      block:
+        - name: The declared identity is checked
+          ansible.builtin.include_role:
+            name: account
+            tasks_from: validate.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: an empty account name was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            account_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: The run failed on the name, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in account_refusal"
+          - "'portable lowercase login name' in account_refusal"
+        fail_msg: "{{ account_refusal | default('the include did not fail') }}"
+
+- name: The root account is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    account_name: root
+    account_uid: 1500
+    account_gid: 1500
+  tasks:
+    - name: The root name fails the run
+      block:
+        - name: The declared identity is checked
+          ansible.builtin.include_role:
+            name: account
+            tasks_from: validate.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: root was accepted as the engine's account"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            account_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: The run failed on the name, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in account_refusal"
+          - "'never root' in account_refusal"
+        fail_msg: "{{ account_refusal | default('the include did not fail') }}"
+
+- name: A name carrying a separator is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    account_name: "ctr:x"
+    account_uid: 1500
+    account_gid: 1500
+  tasks:
+    - name: The name with a separator fails the run
+      block:
+        - name: The declared identity is checked
+          ansible.builtin.include_role:
+            name: account
+            tasks_from: validate.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a name carrying ':' was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            account_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: The run failed on the name, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in account_refusal"
+          - "'portable lowercase login name' in account_refusal"
+        fail_msg: "{{ account_refusal | default('the include did not fail') }}"
+
+- name: A UID above Debian's static range is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    account_name: ctr-new
+    account_uid: 70000
+    account_gid: 1500
+  tasks:
+    - name: The out-of-range UID fails the run
+      block:
+        - name: The declared identity is checked
+          ansible.builtin.include_role:
+            name: account
+            tasks_from: validate.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: uid 70000, above the static range, was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            account_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: The run failed on the range, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in account_refusal"
+          - "'static range' in account_refusal"
+        fail_msg: "{{ account_refusal | default('the include did not fail') }}"
+
+- name: A GID above Debian's static range is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    account_name: ctr-new
+    account_uid: 1500
+    account_gid: 70000
+  tasks:
+    - name: The out-of-range GID fails the run
+      block:
+        - name: The declared identity is checked
+          ansible.builtin.include_role:
+            name: account
+            tasks_from: validate.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: gid 70000, above the static range, was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            account_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: The run failed on the range, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in account_refusal"
+          - "'static range' in account_refusal"
+        fail_msg: "{{ account_refusal | default('the include did not fail') }}"
+
+- name: The identifier rules hold on this host
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  pre_tasks:
+    - name: The host's accounts and groups are read
+      ansible.builtin.getent:
+        database: "{{ item }}"
+      loop:
+        - passwd
+        - group
+      changed_when: false
+
+    - name: The current identity and the first free identifiers are found
+      ansible.builtin.set_fact:
+        account_current_name: "{{ lookup('env', 'USER') }}"
+        account_current_uid: "{{ ansible_facts.getent_passwd[lookup('env', 'USER')][1] }}"
+        account_current_gid: "{{ ansible_facts.getent_passwd[lookup('env', 'USER')][2] }}"
+        account_current_group: >-
+          {%- set found = [] -%}
+          {%- for name, fields in ansible_facts.getent_group.items() -%}
+          {%- if fields[1] == ansible_facts.getent_passwd[lookup('env', 'USER')][2] -%}
+          {%- set _ = found.append(name) -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ found | first | default('') }}
+        account_proof_uid: >-
+          {{ range(1500, 60000) | reject('in',
+             ansible_facts.getent_passwd.values() | map(attribute=1) | map('int') | list) | first }}
+        account_proof_gid: >-
+          {{ range(1500, 60000) | reject('in',
+             ansible_facts.getent_group.values() | map(attribute=1) | map('int') | list) | first }}
+
+    - name: The proof runs as a regular account
+      ansible.builtin.assert:
+        that:
+          - account_current_uid | int >= 1000
+          - account_current_uid | int <= 60000
+        fail_msg: "this proof must run as a regular account, not root"
+
+  tasks:
+    - name: A UID another account holds is refused
+      block:
+        - name: The declared identity is checked
+          ansible.builtin.include_role:
+            name: account
+            tasks_from: validate.yml
+          vars:
+            account_name: ctr-new
+            account_uid: "{{ account_current_uid }}"
+            account_gid: "{{ account_proof_gid }}"
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a UID another account holds was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            account_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: The run failed on the UID holder, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in account_refusal"
+          - >-
+            ('uid ' ~ account_current_uid ~ ' is held by '
+             ~ account_current_name) in account_refusal
+        fail_msg: "{{ account_refusal | default('the include did not fail') }}"
+
+    - name: A GID another group holds is refused
+      block:
+        - name: The declared identity is checked
+          ansible.builtin.include_role:
+            name: account
+            tasks_from: validate.yml
+          vars:
+            account_name: ctr-new
+            account_uid: "{{ account_proof_uid }}"
+            account_gid: "{{ account_current_gid }}"
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a GID another group holds was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            account_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: The run failed on the GID holder, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in account_refusal"
+          - >-
+            ('gid ' ~ account_current_gid ~ ' is held by '
+             ~ account_current_group) in account_refusal
+        fail_msg: "{{ account_refusal | default('the include did not fail') }}"
+
+    - name: An existing account keeps its UID
+      block:
+        - name: The declared identity is checked
+          ansible.builtin.include_role:
+            name: account
+            tasks_from: validate.yml
+          vars:
+            account_name: "{{ account_current_name }}"
+            account_uid: "{{ account_proof_uid }}"
+            account_gid: "{{ account_current_gid }}"
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: an existing account with another UID was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            account_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: The run failed on the existing UID, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in account_refusal"
+          - "'never rewrites an existing identity' in account_refusal"
+          - "'exists with uid' in account_refusal"
+        fail_msg: "{{ account_refusal | default('the include did not fail') }}"
+
+    - name: An existing account keeps its GID
+      block:
+        - name: The declared identity is checked
+          ansible.builtin.include_role:
+            name: account
+            tasks_from: validate.yml
+          vars:
+            account_name: "{{ account_current_name }}"
+            account_uid: "{{ account_current_uid }}"
+            account_gid: "{{ account_proof_gid }}"
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: an existing account with another GID was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            account_refusal: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: The run failed on the existing GID, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in account_refusal"
+          - "'never rewrites an existing identity' in account_refusal"
+          - "'exists with gid' in account_refusal"
+        fail_msg: "{{ account_refusal | default('the include did not fail') }}"
+
+    - name: The same free identity is accepted for a new account
+      ansible.builtin.include_role:
+        name: account
+        tasks_from: validate.yml
+      vars:
+        account_name: ctr-proof
+        account_uid: "{{ account_proof_uid }}"
+        account_gid: "{{ account_proof_gid }}"
+        account_shell: /bin/sh
+
+    - name: The host does not hold the accepted identity
+      ansible.builtin.assert:
+        that:
+          - not (account_name_exists | bool)
+          - account_uid_holder | length == 0
+          - account_gid_holder | length == 0

@@ -1,0 +1,8 @@
+---
+account_enabled: true
+account_name: container
+account_uid: 1500
+account_gid: 1500
+account_shell: /bin/bash
+account_comment: rootless container engine
+account_create_home: true

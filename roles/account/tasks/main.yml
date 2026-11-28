@@ -1,0 +1,68 @@
+---
+- name: The account is configured
+  when: account_enabled | bool
+  block:
+    - name: The declared identity is checked against the host
+      ansible.builtin.include_tasks: validate.yml
+
+    - name: The owning group exists with the declared GID
+      ansible.builtin.group:
+        name: "{{ account_name }}"
+        gid: "{{ account_gid | int }}"
+        state: present
+
+    - name: The owning account exists with the declared identity
+      ansible.builtin.user:
+        name: "{{ account_name }}"
+        uid: "{{ account_uid | int }}"
+        group: "{{ account_name }}"
+        home: "{{ account_home | default(omit, true) }}"
+        shell: "{{ account_shell }}"
+        comment: "{{ account_comment }}"
+        create_home: "{{ account_create_home | bool }}"
+        password_lock: true
+        state: present
+
+    - name: The account is read back
+      ansible.builtin.getent:
+        database: "{{ item }}"
+        key: "{{ account_name }}"
+      loop:
+        - passwd
+        - group
+      changed_when: false
+
+    - name: The account carries the declared identity
+      ansible.builtin.assert:
+        that:
+          - account_passwd[1] == account_uid | string
+          - account_passwd[2] == account_gid | string
+          - account_home | default('') | length == 0 or account_passwd[4] == account_home
+          - account_passwd[5] == account_shell
+          - account_group[1] == account_gid | string
+        fail_msg: >-
+          {{ account_name }} reads back as uid {{ account_passwd[1] | default('?') }},
+          gid {{ account_passwd[2] | default('?') }}, home
+          {{ account_passwd[4] | default('?') }}, shell
+          {{ account_passwd[5] | default('?') }}; declared uid {{ account_uid }},
+          gid {{ account_gid }}, home {{ account_home }}, shell {{ account_shell }}.
+      vars:
+        account_passwd: "{{ ansible_facts.getent_passwd[account_name] | default([]) }}"
+        account_group: "{{ ansible_facts.getent_group[account_name] | default([]) }}"
+
+    - name: The home directory is read
+      ansible.builtin.stat:
+        path: "{{ account_home | default(account_passwd[4], true) }}"
+      register: account_home_stat
+      when: account_create_home | bool
+
+    - name: The home directory belongs to the account
+      ansible.builtin.assert:
+        that:
+          - account_home_stat.stat.isdir | default(false)
+          - account_home_stat.stat.pw_name | default('') == account_name
+        fail_msg: >-
+          {{ account_home }} is not a directory owned by {{ account_name }}; the
+          role creates the home of a new account only. Move the tree, or set
+          account_home to the directory the account owns.
+      when: account_create_home | bool

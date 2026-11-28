@@ -11,7 +11,7 @@ quadlet_enabled: false
 # The account that owns the units. Rootless only: the rootful generator reads
 # `/etc/containers/systemd` and is a different decision, deliberately not taken.
 # Set it explicitly, or let it follow the `podman` role's account.
-quadlet_user: "{{ podman_user | default('') }}"
+quadlet_user: "{{ podman_user | default(account_name | default('')) }}"
 
 # One entry per declaration:
 #

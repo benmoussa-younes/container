@@ -17,6 +17,14 @@ scripts check --module --deny-warnings tools/scripts/modules/*.scs
 scripts run --no-warnings tools/scripts/binaries/gate.scs  # one VERDICT line, exit 0/1
 ```
 
+The sandbox converge runs on this host as root, with the become password file
+the owner keeps; it creates the sandbox account, and the teardown is the
+owner's:
+
+```sh
+ANSIBLE_BECOME_PASSWORD_FILE=~/.ansible/become scripts run tools/scripts/binaries/verify-sandbox.scs
+```
+
 The gate is the repository's single entry point: the tree, the version, the
 licences, the collection archive and the secret shapes, then the linters and the
 playbooks' syntax. It does not change tracked files.
@@ -29,8 +37,10 @@ podman build -t localhost/benmoussa/container:0.1.0 images/base
 
 ## Conventions
 
-- Rootless only: one existing non-root account owns the engine; the rootful
-  socket is never enabled and `/etc/containers/systemd` is never written.
+- Rootless only: one non-root account owns the engine. `roles/account` creates
+  it (`container`, uid/gid 1500 by default; name, UID, GID, home and shell are
+  site values), and the rootful socket is never enabled and
+  `/etc/containers/systemd` is never written.
 - Only `ansible.builtin` is used; `requirements.yml` declares no collection.
 - A role keeps its `meta/argument_specs.yml` contract and its idempotence, and
   reads its own change back (the Quadlet role reads every generated unit).

@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `account`: the collection creates the login account the rootless engine runs
+  as, so a host needs no pre-existing human. The defaults are `container` with
+  uid/gid 1500, the distribution's home for that name and `/bin/bash`; the name,
+  UID, GID, home and shell are inventory values. The role refuses to rewrite an existing
+  identity (an account or a group that already holds another UID or GID fails
+  the run), reads the account back, and checks that the home belongs to it.
+  `playbooks/site.yml` runs it first, when the engine or the declarations are
+  enabled.
+
+### Changed
+
+- `podman_user` defaults to the account `roles/account` declares
+  (`account_name`, `container` by default) instead of the undefined
+  `accounts_human.name`, which left the engine with an empty account on any
+  host that did not define that foreign variable.
+- The README no longer asks for an existing human account, and the sandbox
+  inventory no longer asks the owner to create its account by hand.
+
 ## [0.3.0] - 2026-11-27
 
 ### Added

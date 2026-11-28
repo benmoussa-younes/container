@@ -1,0 +1,64 @@
+---
+argument_specs:
+  main:
+    short_description: The account that owns the rootless Podman engine
+    description:
+      - Creates the group and the login account the rootless engine runs as,
+        with the declared name, UID and GID.
+      - It refuses to rewrite an existing identity. An account or a group that
+        already holds the name with another UID or GID fails the run, and so
+        does a UID or GID another account already holds; the role never moves
+        an existing identity.
+      - It creates no subordinate ID, no linger and no engine configuration.
+        The C(podman) role owns them and runs after this one.
+    options:
+      account_enabled:
+        type: bool
+        required: false
+        default: true
+        description: Whether the account is managed at all.
+      account_name:
+        type: str
+        required: false
+        default: container
+        description:
+          - The login name. A portable lowercase name, never C(root).
+      account_uid:
+        type: int
+        required: false
+        default: 1500
+        description:
+          - The account's UID, in Debian's static range (1000-60000); the
+            dynamic range starts at 61184.
+      account_gid:
+        type: int
+        required: false
+        default: 1500
+        description:
+          - The group's GID, in Debian's static range (1000-60000); the
+            dynamic range starts at 61184.
+      account_home:
+        type: str
+        required: false
+        description:
+          - The home directory. When omitted, the distribution's default for
+            the account name, read back from the host.
+      account_shell:
+        type: str
+        required: false
+        default: /bin/bash
+        description:
+          - The login shell. C(/usr/sbin/nologin) makes the account a service
+            account; C(/bin/bash) keeps C(su -) available for debugging.
+      account_comment:
+        type: str
+        required: false
+        default: rootless container engine
+        description: The GECOS field of the account.
+      account_create_home:
+        type: bool
+        required: false
+        default: true
+        description:
+          - Whether the home directory is created when it is missing. An
+            existing home that belongs to another account fails the read-back.

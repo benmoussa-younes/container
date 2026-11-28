@@ -18,7 +18,9 @@ argument_specs:
       quadlet_user:
         type: str
         required: false
-        description: The existing non-root account that owns the units.
+        description: >-
+          The account that owns the units. It defaults to the name
+          `roles/account` declares (`account_name`, `container` by default).
       quadlet_units:
         type: list
         elements: dict

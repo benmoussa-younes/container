@@ -1,0 +1,93 @@
+---
+- name: The account name is a portable login name
+  ansible.builtin.assert:
+    that:
+      - account_name is string and account_name | length > 0
+      - account_name is match('^[a-z_][a-z0-9_-]{0,31}$')
+      - account_name != 'root'
+    fail_msg: >-
+      account_name must be a portable lowercase login name (a letter or an
+      underscore, then letters, digits, underscores or hyphens, 32 characters
+      at most) and never root; got '{{ account_name }}'.
+    quiet: true
+
+- name: The host's accounts and groups are read
+  ansible.builtin.getent:
+    database: "{{ item }}"
+  loop:
+    - passwd
+    - group
+  changed_when: false
+
+- name: The holders of the declared name and identifiers are found
+  ansible.builtin.set_fact:
+    account_name_exists: "{{ account_name in ansible_facts.getent_passwd }}"
+    account_existing_uid: >-
+      {{ (ansible_facts.getent_passwd[account_name] | default(['', '', '', '', '', '']))[1] }}
+    account_existing_gid: >-
+      {{ (ansible_facts.getent_passwd[account_name] | default(['', '', '', '', '', '']))[2] }}
+    account_uid_holder: >-
+      {%- set found = [] -%}
+      {%- for name, fields in ansible_facts.getent_passwd.items() -%}
+      {%- if name != account_name and fields[1] == account_uid | string -%}
+      {%- set _ = found.append(name) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ found | first | default('') }}
+    account_gid_holder: >-
+      {%- set found = [] -%}
+      {%- for name, fields in ansible_facts.getent_group.items() -%}
+      {%- if name != account_name and fields[1] == account_gid | string -%}
+      {%- set _ = found.append(name) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ found | first | default('') }}
+
+- name: An existing account keeps its identity
+  ansible.builtin.assert:
+    that:
+      - account_existing_uid | length == 0 or account_existing_uid == account_uid | string
+      - account_existing_gid | length == 0 or account_existing_gid == account_gid | string
+    fail_msg: >-
+      {{ account_name }} exists with {{ account_identity_field }}
+      {{ account_identity_existing }} and account_{{ account_identity_field }}
+      is {{ account_identity_declared }}; this role never rewrites an existing
+      identity. Declare the {{ account_identity_field | upper }} the account
+      already holds, or set account_enabled: false.
+    quiet: true
+  vars:
+    account_identity_field: "{{ 'uid' if account_existing_uid != account_uid | string else 'gid' }}"
+    account_identity_existing: >-
+      {{ account_existing_uid if account_existing_uid != account_uid | string
+         else account_existing_gid }}
+    account_identity_declared: >-
+      {{ account_uid if account_existing_uid != account_uid | string
+         else account_gid }}
+
+- name: The declared identifiers are free
+  ansible.builtin.assert:
+    that:
+      - account_uid_holder | length == 0
+      - account_gid_holder | length == 0
+    fail_msg: >-
+      {{ account_holder_field }} {{ account_holder_value }} is held by
+      {{ account_holder_name }}; choose a free {{ account_holder_field | upper }}.
+    quiet: true
+  vars:
+    account_holder_field: "{{ 'uid' if account_uid_holder | length > 0 else 'gid' }}"
+    account_holder_value: "{{ account_uid if account_uid_holder | length > 0 else account_gid }}"
+    account_holder_name: >-
+      {{ account_uid_holder if account_uid_holder | length > 0 else account_gid_holder }}
+
+- name: The identifiers are in Debian's static range
+  ansible.builtin.assert:
+    that:
+      - account_uid | int >= 1000
+      - account_uid | int <= 60000
+      - account_gid | int >= 1000
+      - account_gid | int <= 60000
+    fail_msg: >-
+      account_uid and account_gid must be in Debian's static range (1000-60000,
+      `/etc/login.defs`); got uid {{ account_uid }} and gid {{ account_gid }}.
+      The dynamic range starts at 61184.
+    quiet: true

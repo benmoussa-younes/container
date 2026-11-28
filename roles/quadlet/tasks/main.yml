@@ -9,8 +9,11 @@
           - quadlet_user | length > 0
           - quadlet_user != 'root'
         fail_msg: >-
-          quadlet_user must name an existing non-root account. The rootful
-          generator reads /etc/containers/systemd and is not configured here.
+          quadlet_user must name a non-root account. `roles/account` creates
+          {{ account_name | default('container') }} by default; run it first, or
+          declare quadlet_user and account_name for the account you own. The
+          rootful generator reads /etc/containers/systemd and is not configured
+          here.
 
     - name: The owning account is read
       ansible.builtin.getent:
@@ -25,7 +28,10 @@
       ansible.builtin.assert:
         that:
           - quadlet_user in ansible_facts.getent_passwd
-        fail_msg: "{{ quadlet_user }} does not exist on this host."
+        fail_msg: >-
+          {{ quadlet_user }} does not exist on this host. `roles/account` creates
+          it (account_enabled: true); run it first, or declare quadlet_user for
+          an account that exists.
 
     - name: The owning account's UID, GID and home are known
       ansible.builtin.set_fact:

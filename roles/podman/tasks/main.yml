@@ -80,8 +80,10 @@
           - podman_user | length > 0
           - podman_user != 'root'
         fail_msg: >-
-          podman_user must name an existing non-root account; this role never
-          configures the rootful engine.
+          podman_user must name a non-root account. `roles/account` creates
+          {{ account_name | default('container') }} (uid/gid 1500) by default;
+          run it first, or declare podman_user and account_name for the account
+          you own. This role never configures the rootful engine.
 
     - name: The owning account is read
       ansible.builtin.getent:
@@ -92,7 +94,10 @@
       ansible.builtin.assert:
         that:
           - podman_user in ansible_facts.getent_passwd
-        fail_msg: "{{ podman_user }} does not exist on this host."
+        fail_msg: >-
+          {{ podman_user }} does not exist on this host. `roles/account` creates
+          it (account_enabled: true); run it first, or declare podman_user for
+          an account that exists.
 
     - name: The owning account's UID and home are known
       ansible.builtin.set_fact:
