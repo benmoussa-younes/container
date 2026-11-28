@@ -17,9 +17,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the run), reads the account back, and checks that the home belongs to it.
   `playbooks/site.yml` runs it first, when the engine or the declarations are
   enabled.
+- `quadlet`: a declared unit and the drop-ins the role writes for it are
+  `0600`, not `0644`: the text belongs to the account, and a credential left in
+  it is readable by that account only.
+- `quadlet`: the boot contract reads the `[Install]` section itself: a
+  `WantedBy=`/`RequiredBy=`/`DefaultInstance=` written in another section no
+  longer satisfies it.
+- `quadlet`: a declaration carries `dropins`, a list of `{name, content}` files
+  written into `<name>.<type>.d/`. The role refuses a name that does not end in
+  `.conf`, a name the product owns, a duplicate and a drop-in on an absent unit,
+  keeps the list it wrote in `.ansible-managed.json`, and removes a drop-in the
+  site stops declaring (or withdraws with its unit). Quadlet merges each
+  declared `.conf` into the generated unit without naming it there, so the
+  sandbox asserts the drop-in's effect. The argument/sandbox keys stay refused
+  in a drop-in too.
+- `quadlet`: `PodmanArgs`, `GlobalArgs`, `Unmask`, `SeccompProfile` and
+  `Privileged` are refused in any declared unit, whatever their value, because
+  they bypass the hardening drop-in rather than relax one setting. The
+  published host-port floor is enforced. A `PublishPort` whose
+  host port is below `quadlet_unprivileged_port_start` (the host's
+  `net.ipv4.ip_unprivileged_port_start` when empty) fails the run, and template
+  unit names (`foo@.container`) are accepted. A template that carries `[Install]`
+  must also carry `DefaultInstance=`, or no instance is activated.
+- `podman`: `podman_auto_update` (false by default) enables the account's
+  `podman-auto-update.timer`, without which a unit's `AutoUpdate=registry` is a
+  dead setting. The engine read-back now refuses a `vfs` store, a cgroup other
+  than v2 and a network backend other than netavark, instead of reading only the
+  rootless flag.
 
 ### Changed
 
+- `podman`: the README states what the enabled user socket grants (the
+  account's engine rights) and that rootless Podman on Debian applies no
+  AppArmor or SELinux layer (`podman info`: `apparmorEnabled=false`,
+  `selinuxEnabled=false`); seccomp is the confinement.
+- `podman`: the Debian 13 / systemd / cgroup v2 guard sits inside the
+  `podman_enabled` block: a disabled role now only removes its own drop-in, and
+  the argument spec resolves before the account is read (`podman_home` has an
+  empty default, like `quadlet_home`).
+- `podman`: the engine's configuration moved into the account's home
+  (`~/.config/containers/{containers,registries}.conf`, `policy.json`), owned
+  by the account and read before the host-wide files; for `registries.conf` and
+  `policy.json` the user file replaces the host-wide one, so the account's
+  registry list is complete. The role removes the host-wide
+  `99-container-podman.conf` it wrote before and the `99-podman.conf` of the
+  retired edition roles, and never writes `/etc/containers` again.
+- `podman`: `no_new_privileges` is removed from `containers.conf` and the
+  `podman_no_new_privileges` variable is gone: Podman 5.4.2 accepts the key and
+  never applies it (measured: `NoNewPrivs` stays 0 with the key in either
+  table and turns 1 with `--security-opt no-new-privileges`). The Quadlet
+  hardening drop-in still sets `NoNewPrivileges=true` for the product's units.
+- `podman`: `containers.conf` states the product's choices: a read-only root
+  (`podman_read_only`), the distribution's seccomp profile
+  (`podman_seccomp_profile`), the caller's user namespace (`podman_userns`),
+  the nofile ulimit (`podman_default_ulimits`), `pull_policy`, and the `pasta`
+  rootless network command.
+- `podman`: `registries.conf` sets `short-name-mode = "enforcing"`
+  (`podman_short_name_mode`), and the new `policy.json` accepts only the
+  registries `podman_registries` declares.
+- `quadlet`: a declared `.container` or `.image` must name its image by digest
+  (`@sha256:` and 64 hex characters), or reference a `.image` unit by name
+  (`base.image`, whose own `Image=` is checked), while
+  `quadlet_image_digest_required` is on; `image_digest: false` is the per-unit
+  opt-out. `.kube` and `.build` units are not parsed. The rule reads a unit's
+  `dropins` too, and the port floor does as well: a value written beside the
+  unit cannot bypass either check.
+- The supported `ansible-core` range is **2.20 to below 2.23**: 2.19 reaches
+  end of life on 2026-11-30, and the CI matrix no longer runs it.
+- The base image locks every setuid/setgid bit **after** it creates the account
+  and locks root, so a bit introduced by the account setup cannot survive.
 - `podman_user` defaults to the account `roles/account` declares
   (`account_name`, `container` by default) instead of the undefined
   `accounts_human.name`, which left the engine with an empty account on any
@@ -108,9 +174,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PRETTY_NAME`, a version of its own or `/etc/container-edition`: the
   collection is a capability and owns no identity, in an image or on a host.
 - The collection version is `0.2.0`. The invariants a `0.3.0` would carry —
-  images pinned by digest, `storage.conf.d`, the auto-update timer, a service
-  account, no TCP socket — are not implemented yet, so this release does not
-  claim them.
+  images pinned by digest, a read-back of the storage driver (Podman 5.4.2 has
+  no `storage.conf.d`), the auto-update timer, a service account, no TCP
+  socket — are not implemented yet, so this release does not claim them.
 
 ### Fixed
 
@@ -153,7 +219,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verified against its release `SHA256SUMS`), one non-root account, a locked
   root, no setuid bit and a branded `/etc/os-release`.
 - The engine's defaults in `containers.conf`: `no_new_privileges` on, the pids
-  limit and the log size bounded, `umask` 0077 and the `crun` runtime — Debian
+  limit bounded, `umask` 0077 and the `crun` runtime — Debian
   leaves all of them permissive.
 - The Quadlet role writes the product's global hardening drop-in
   (`NoNewPrivileges`, all capabilities dropped, read-only rootfs, `RunInit`,
@@ -170,7 +236,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The configuration drop-ins are named `99-container-podman.conf`, so the
   collection does not collide with a site's own Podman configuration.
 
-[Unreleased]: https://github.com/benmoussa-younes/container/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/benmoussa-younes/container/compare/v0.2.0...HEAD
 [0.3.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.3.0
 [0.2.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.2.0
 [0.1.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.1.0

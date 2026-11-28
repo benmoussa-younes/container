@@ -3,6 +3,11 @@
 - name: The Quadlet declarations are configured
   when: quadlet_enabled | bool
   block:
+    - name: The drop-in bookkeeping starts empty
+      ansible.builtin.set_fact:
+        quadlet_previous_dropins: {}
+        quadlet_stale_dropins: []
+
     - name: The owning account is declared
       ansible.builtin.assert:
         that:
@@ -39,6 +44,24 @@
         quadlet_gid: "{{ ansible_facts.getent_passwd[quadlet_user][2] }}"
         quadlet_home: "{{ ansible_facts.getent_passwd[quadlet_user][4] }}"
 
+    - name: The declared port floor is a number or empty
+      ansible.builtin.assert:
+        that:
+          - quadlet_unprivileged_port_start | string | length == 0
+            or quadlet_unprivileged_port_start | string is match('^[0-9]+$')
+        fail_msg: >-
+          quadlet_unprivileged_port_start is '{{ quadlet_unprivileged_port_start }}':
+          declare a port number, or leave it empty to read the kernel value.
+        quiet: true
+
+    - name: The unprivileged port floor is read
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: cat /proc/sys/net/ipv4/ip_unprivileged_port_start
+      register: quadlet_port_floor
+      changed_when: false
+      check_mode: false
+      when: quadlet_unprivileged_port_start | string | length == 0
+
     - name: The owning account's primary group is known
       ansible.builtin.set_fact:
         quadlet_group: >-
@@ -52,7 +75,7 @@
       ansible.builtin.assert:
         that:
           - item.name is defined and item.name | length > 0
-          - item.name is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+          - item.name is match('^[A-Za-z0-9][A-Za-z0-9_.@-]*$')
           - item.name is not search('\\.(container|volume|network|pod|image|build|kube)$')
           - item.type is defined and item.type in quadlet_types
           - (item.state | default('present')) in ['present', 'absent']
@@ -82,6 +105,43 @@
           them another name.
         quiet: true
 
+    - name: Every declaration's drop-ins are a list of unique entries
+      ansible.builtin.assert:
+        that:
+          - item.dropins is not defined
+            or ((item.dropins | type_debug) == 'list'
+                and (item.state | default('present')) != 'absent'
+                and (item.dropins | map(attribute='name') | unique | length)
+                    == (item.dropins | length))
+        fail_msg: >-
+          `{{ item.name }}` declares drop-ins that are not a list of uniquely
+          named entries. Declare `dropins` as a list of `{name, content}`
+          entries, and not on a unit whose state is absent.
+        quiet: true
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Every declared drop-in is complete
+      ansible.builtin.assert:
+        that:
+          - (item.1 is mapping
+             and item.1.name is defined
+             and item.1.name | length > 0
+             and item.1.name is match('^[A-Za-z0-9][A-Za-z0-9_.-]*\.conf$')
+             and item.1.name not in quadlet_product_dropins
+             and item.1.content is defined
+             and item.1.content | string | length > 0)
+        fail_msg: >-
+          `{{ item.0.name }}` declares the drop-in `{{ item.1 }}`: it needs a
+          name ending in `.conf`, without a directory, that is not one of the
+          product's own (`{{ quadlet_product_dropins | join(', ') }}`), and a
+          non-empty content.
+        quiet: true
+      loop: "{{ quadlet_units | subelements('dropins', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1.name | default('?') if item.1 is mapping else '?' }}"
+
     # Quadlet applies `[Install]` at generation and starts nothing at boot
     # without it, so a container unit that never says how it starts is a unit
     # that never comes back after a reboot. `boot: false` is the explicit
@@ -89,17 +149,25 @@
     - name: Every container or kube unit can start at boot, or says it must not
       ansible.builtin.assert:
         that:
-          - (item.content is search('(?m)^[ \t]*\[Install\][ \t]*$')
-             and (item.content is search('(?mi)^[ \t]*WantedBy[ \t]*=')
-                  or item.content is search('(?mi)^[ \t]*RequiredBy[ \t]*=')))
+          - quadlet_install_section is search('(?m)^[ \t]*(WantedBy|RequiredBy)[ \t]*=')
+          - (not (item.name is search('@$'))
+             or quadlet_install_section is search('(?m)^[ \t]*DefaultInstance[ \t]*='))
         fail_msg: >-
-          `{{ item.name }}` declares no `[Install]` section, so Quadlet generates
-          the unit and it never starts at boot. Add `WantedBy=default.target`, or
-          declare `boot: false` for a unit another one starts.
+          `{{ item.name }}` declares no usable `[Install]` section, so Quadlet
+          generates the unit and it never starts at boot. Add
+          `WantedBy=default.target` inside `[Install]`, or declare `boot: false`
+          for a unit another one starts. A template name (`@`) also needs
+          `DefaultInstance=` in `[Install]`: Quadlet activates no instance
+          without it.
         quiet: true
       loop: "{{ quadlet_units }}"
       loop_control:
         label: "{{ item.name }}"
+      vars:
+        quadlet_install_section: >-
+          {{ item.content
+             | regex_findall('(?ms)^[ \t]*\[Install\][ \t]*\n(.*?)(?=^[ \t]*\[|\Z)')
+             | join('\n') }}
       when:
         - (item.type | default('')) in ['container', 'kube']
         - (item.state | default('present')) == 'present'
@@ -180,13 +248,120 @@
         - (item.type | default('')) == 'container'
         - (item.state | default('present')) == 'present'
 
+    - name: Every published host port is above the unprivileged floor
+      ansible.builtin.assert:
+        that:
+          - quadlet_published_ports | select('lt', quadlet_effective_port_start | int) | list | length == 0
+        fail_msg: >-
+          `{{ item.name }}` publishes a host port below this host's
+          unprivileged floor ({{ quadlet_effective_port_start }}):
+          {{ quadlet_published_ports | join(', ') | default('none', true) }}.
+          Lower `net.ipv4.ip_unprivileged_port_start`, or publish a higher
+          host port.
+        quiet: true
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - (item.type | default('')) == 'container'
+        - (item.state | default('present')) == 'present'
+      vars:
+        quadlet_effective_port_start: >-
+          {{ quadlet_unprivileged_port_start
+             if quadlet_unprivileged_port_start | string | length > 0
+             else quadlet_port_floor.stdout | default('0') | trim }}
+        quadlet_published_ports: >-
+          {{ ((item.content | default('')) ~ '\n'
+              ~ (item.dropins | default([]) | map(attribute='content') | join('\n')))
+             | regex_findall('(?m)^[ \t]*PublishPort[ \t]*=[ \t]*[^\n]+')
+             | map('regex_findall', '[=:][ \t]*([0-9]+)(?:-[0-9]+)?:[0-9]+(?:-[0-9]+)?') | flatten
+             | map('int') | list }}
+
+    - name: The forbidden key prefixes are compiled once
+      ansible.builtin.set_fact:
+        quadlet_forbidden_prefix_pattern: >-
+          {{ '(?m)^[ \t]*('
+             ~ (quadlet_forbidden_prefixes | map('regex_escape') | join('|'))
+             ~ ')[ \t]*=[ \t]*' }}
+      when:
+        - quadlet_hardened_defaults | bool
+        - quadlet_forbidden_prefixes | length > 0
+
+    - name: No declared unit carries a forbidden key prefix
+      ansible.builtin.assert:
+        that:
+          - item.content is not search(quadlet_forbidden_prefix_pattern)
+        fail_msg: >-
+          `{{ item.name }}` declares a key the product forbids while the
+          hardened defaults are on: {{ quadlet_forbidden_prefixes | join(', ') }}.
+          The value is not read: any use of the key is refused.
+        quiet: true
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - quadlet_hardened_defaults | bool
+        - quadlet_forbidden_prefixes | length > 0
+        - (item.state | default('present')) == 'present'
+
+    - name: No declared drop-in carries a forbidden key prefix
+      ansible.builtin.assert:
+        that:
+          - item.1.content is not search(quadlet_forbidden_prefix_pattern)
+        fail_msg: >-
+          `{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1.name }}` carries a
+          key the product forbids while the hardened defaults are on:
+          {{ quadlet_forbidden_prefixes | join(', ') }}. A drop-in relaxes one
+          property of `quadlet_forbidden`; these keys bypass the hardening
+          drop-in as a whole. Empty `quadlet_forbidden_prefixes` deliberately.
+        quiet: true
+      loop: "{{ quadlet_units | subelements('dropins', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1.name }}"
+      when:
+        - quadlet_hardened_defaults | bool
+        - quadlet_forbidden_prefixes | length > 0
+        - (item.0.state | default('present')) == 'present'
+
+    - name: Every declared image is pinned by digest
+      ansible.builtin.assert:
+        that:
+          - quadlet_undigested_images | length == 0
+        fail_msg: >-
+          `{{ item.name }}` names an image without a digest:
+          {{ quadlet_undigested_images | join(', ') }}.
+          Pin it with `@sha256:<64 hex>`, or declare `image_digest: false` for
+          this unit, or empty `quadlet_image_digest_required` deliberately.
+        quiet: true
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}"
+      vars:
+        # A unit's own drop-in is merged into the generated unit, so an
+        # `Image=` or a `PublishPort=` there must meet the same rule as the
+        # declaration: writing it beside the unit would otherwise bypass the
+        # digest and the port floor.
+        quadlet_declared_images: >-
+          {{ ((item.content | default('')) ~ '\n'
+              ~ (item.dropins | default([]) | map(attribute='content') | join('\n')))
+             | regex_findall('(?mi)^[ \t]*Image[ \t]*=[ \t]*([^\n]+)')
+             | map('trim') | list }}
+        quadlet_undigested_images: >-
+          {{ quadlet_declared_images
+             | reject('search', '(@sha256:[0-9a-f]{64}$|[.]image$)') | list }}
+      when:
+        - quadlet_image_digest_required | bool
+        - (item.type | default('')) in ['container', 'image']
+        - (item.state | default('present')) == 'present'
+        - item.image_digest | default(true) | bool
+
     - name: The declared units are written
       ansible.builtin.copy:
         content: "{{ item.content }}"
         dest: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}"
         owner: "{{ quadlet_user }}"
         group: "{{ quadlet_group }}"
-        mode: "{{ item.mode | default('0644') }}"
+        mode: "{{ item.mode | default('0600') }}"
       loop: "{{ quadlet_units }}"
       loop_control:
         label: "{{ item.name }}.{{ item.type }}"
@@ -255,6 +430,103 @@
              or item.1.value | length == 0)
       notify: Reload the user manager
 
+    # The role writes the drop-in list into a file Quadlet ignores (only `.conf`
+    # files are read), so the next run knows what it wrote and can remove what
+    # the site stopped declaring instead of leaving it active.
+    - name: The drop-in state file of every declared unit is read
+      ansible.builtin.slurp:
+        src: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}.d/.ansible-managed.json"
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}"
+      register: quadlet_dropin_manifests
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: The drop-ins the role wrote before are known per unit
+      ansible.builtin.set_fact:
+        quadlet_previous_dropins: >-
+          {{ dict(quadlet_dropin_manifests.results | default([])
+                  | selectattr('content', 'defined') | list
+                  | map(attribute='item') | map(attribute='name')
+                  | zip(quadlet_dropin_manifests.results | default([])
+                        | selectattr('content', 'defined') | list
+                        | map(attribute='item') | map(attribute='type'))
+                  | map('join', '.') | list
+                  | zip(quadlet_dropin_manifests.results | default([])
+                        | selectattr('content', 'defined') | list
+                        | map(attribute='content') | map('b64decode')
+                        | map('default', '[]', true) | map('from_json'))) }}
+
+    - name: The drop-ins the role wrote and no longer declares are compiled
+      ansible.builtin.set_fact:
+        quadlet_stale_dropins: >-
+          {{ quadlet_stale_dropins | default([])
+             + ((quadlet_previous_dropins[item.name ~ '.' ~ item.type] | default([]))
+                | difference(item.dropins | default([]) | map(attribute='name') | list)
+                | map('regex_replace', '^', item.name ~ '.' ~ item.type ~ '.d/') | list) }}
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}"
+
+    - name: The drop-ins the role wrote and no longer declares are removed
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}/{{ item }}"
+        state: absent
+      loop: "{{ quadlet_stale_dropins }}"
+      notify: Reload the user manager
+
+    - name: The directory of every declared drop-in exists
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}.d"
+        state: directory
+        owner: "{{ quadlet_user }}"
+        group: "{{ quadlet_group }}"
+        mode: "0755"
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}.d"
+      when:
+        - (item.state | default('present')) == 'present'
+        - item.dropins | default([]) | length > 0
+
+    - name: The declared drop-ins are written
+      ansible.builtin.copy:
+        content: "{{ item.1.content }}"
+        dest: "{{ quadlet_directory }}/{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1.name }}"
+        owner: "{{ quadlet_user }}"
+        group: "{{ quadlet_group }}"
+        mode: "0600"
+      loop: "{{ quadlet_units | subelements('dropins', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1.name }}"
+      when: (item.0.state | default('present')) == 'present'
+      notify: Reload the user manager
+
+    - name: The drop-in state file lists what the role wrote
+      ansible.builtin.copy:
+        content: "{{ item.dropins | map(attribute='name') | list | sort | to_nice_json }}\n"
+        dest: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}.d/.ansible-managed.json"
+        owner: "{{ quadlet_user }}"
+        group: "{{ quadlet_group }}"
+        mode: "0600"
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}.d/.ansible-managed.json"
+      when:
+        - (item.state | default('present')) == 'present'
+        - item.dropins | default([]) | length > 0
+
+    - name: The state file of a unit that declares no drop-in is removed
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}.d/.ansible-managed.json"
+        state: absent
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}.d/.ansible-managed.json"
+      when: item.dropins | default([]) | length == 0
+
     - name: The withdrawn units are removed
       ansible.builtin.file:
         path: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}"
@@ -271,7 +543,7 @@
       ansible.builtin.file:
         path: "{{ quadlet_directory }}/{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1 }}"
         state: absent
-      loop: "{{ quadlet_units | product(['50-default-memory.conf', '51-default-cpu.conf']) | list }}"
+      loop: "{{ quadlet_units | product(quadlet_product_dropins) | list }}"
       loop_control:
         label: "{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1 }}"
       when:

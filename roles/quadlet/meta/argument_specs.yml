@@ -29,10 +29,28 @@ argument_specs:
           One entry per unit file, with `name` (stem), `type` (container,
           volume, network, pod, image, build or kube), `state` (present or
           absent), `content` (the unit file, required when present), an optional
-          `mode`, and an optional `boot` that defaults to true: a container or
+          `mode` (0600 by default: the unit text is the account's, not the
+          host's), an optional `boot` that defaults to true: a container or
           kube unit must then carry `[Install]` with `WantedBy=` or
-          `RequiredBy=`, because Quadlet starts nothing at boot without it.
-          `boot: false` is the opt-out for a unit another unit starts.
+          `RequiredBy=`, because Quadlet starts nothing at boot without it
+          (`boot: false` is the opt-out for a unit another unit starts), and an
+          an optional `image_digest` that defaults to true: a `.container` or
+          `.image` unit that names an image without `@sha256:` is refused while
+          `quadlet_image_digest_required` is on, and `image_digest: false` is
+          the per-unit opt-out, and an
+          optional `dropins`: a list of `{name, content}` entries written into
+          `<stem>.<type>.d/<name>`. Quadlet reads every `.conf` file there and
+          merges it into the generated unit, which is the narrow way to relax
+          one key of `quadlet_forbidden`; the product's own names
+          (`quadlet_product_dropins`) are refused. The role records the list it
+          wrote beside them and removes a drop-in dropped from the declaration.
+      quadlet_product_dropins:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          The per-unit drop-ins the product owns. A declaration may not use
+          those names, and withdrawing a unit removes them.
       quadlet_home:
         type: str
         required: false
@@ -62,6 +80,16 @@ argument_specs:
           The `CPUQuota=` value every container unit gets unless it declares
           its own (`50%`, where 100% is one thread). Empty writes no default,
           with the same drop-in rule as `quadlet_default_memory`.
+      quadlet_image_digest_required:
+        type: bool
+        required: false
+        description: >-
+          Whether a `.container` or `.image` unit must name its image by digest
+          (`@sha256:` with the full 64 hex characters), or reference a `.image`
+          unit by name (`base.image`, whose own `Image=` is checked). A `.kube`
+          unit's images
+          live in its YAML and a `.build` unit names a Containerfile the site
+          owns; neither is parsed here.
       quadlet_verify:
         type: bool
         required: false
@@ -89,6 +117,23 @@ argument_specs:
         description: >-
           Lines a declared container unit may not carry while the hardened
           defaults are on. Empty it to let a site declare any key.
+      quadlet_forbidden_prefixes:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Keys whose every value is refused in any declared unit while the
+          hardened defaults are on: the arguments and sandbox keys that would
+          bypass the drop-in (`PodmanArgs`, `GlobalArgs`, `Unmask`,
+          `SeccompProfile`, `Privileged`). Empty it deliberately.
+      quadlet_unprivileged_port_start:
+        type: str
+        required: false
+        default: ""
+        description: >-
+          The host port floor a declared `PublishPort` must reach. Empty means
+          the host's `net.ipv4.ip_unprivileged_port_start`, read from the
+          kernel; a rootless engine cannot bind below it.
       quadlet_suffixes:
         type: dict
         required: false

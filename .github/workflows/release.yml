@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -53,7 +55,7 @@ jobs:
           pipx install "ansible-core==2.21.*"
           pipx install "ansible-lint==26.11.0"
           pipx install "yamllint==1.37.1"
-          pipx install "reuse==5.0.2"
+          pipx install "reuse==6.3.0"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Verify the tag is signed
@@ -104,6 +106,15 @@ jobs:
       - name: Verify release assets
         run: scripts run tools/scripts/binaries/verify-release.scs
 
+      # The tag is signed by the maintainer, but its signature covers the commit
+      # and not the bytes of the two archives built here. The attestation binds
+      # the archives named in SHA256SUMS to this workflow run and repository;
+      # verify it with `gh attestation verify <asset> --repo <repo>`.
+      - name: Attest the release assets
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: dist/*.tar.gz
+
       - name: Extract the changelog section
         run: |
           version="$(cat VERSION)"
@@ -121,6 +132,7 @@ jobs:
           path: |
             dist/*
             release-notes.md
+            VERSION
 
   release:
     needs: build
@@ -145,16 +157,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          version="$(cat VERSION)"
+          collection="dist/benmoussa-container-${version}.tar.gz"
+          source="dist/container-${version}-src.tar.gz"
+          checksums="dist/SHA256SUMS"
+          for asset in "$collection" "$source" "$checksums"; do
+            test -f "$asset" || { echo "missing $asset" >&2; exit 1; }
+          done
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
+            gh release upload "$TAG" "$collection" "$source" "$checksums" --clobber
           else
             gh release create "$TAG" \
               --verify-tag \
               --title "Container ${TAG}" \
               --notes-file release-notes.md \
-              dist/*
+              "$collection" "$source" "$checksums"
           fi
 
-          # A release created by an earlier attempt can still be a draft: this
-          # job publishes what it uploaded instead of leaving that to a human.
           gh release edit "$TAG" --draft=false

@@ -10,19 +10,30 @@
   hosts: localhost
   connection: local
   gather_facts: false
+
+  pre_tasks:
+    - name: The proof root is unique to this run
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: quadlet-proof.
+      register: quadlet_proof_root
+
+    - name: Every play writes under this run's root
+      ansible.builtin.set_fact:
+        quadlet_proof: "{{ quadlet_proof_root.path }}"
   vars:
     quadlet_enabled: true
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/spacing
+    quadlet_directory: "{{ quadlet_proof }}/spacing"
     quadlet_hardened_defaults: true
     quadlet_units:
       - name: relaxed
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
           Network = host
 
           [Install]
@@ -64,13 +75,13 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/no-install
+    quadlet_directory: "{{ quadlet_proof }}/no-install"
     quadlet_units:
       - name: noboot
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
   tasks:
     - name: The unit without [Install] fails the run
       block:
@@ -108,14 +119,14 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/boot-false
+    quadlet_directory: "{{ quadlet_proof }}/boot-false"
     quadlet_units:
       - name: manual
         type: container
         boot: false
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
   tasks:
     - name: The declarations are applied
       ansible.builtin.include_role:
@@ -124,7 +135,7 @@
 
     - name: The opt-out unit is written
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/boot-false/manual.container
+        path: "{{ quadlet_proof }}/boot-false/manual.container"
       register: quadlet_written
 
     - name: The unit exists
@@ -141,13 +152,13 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/duplicate
+    quadlet_directory: "{{ quadlet_proof }}/duplicate"
     quadlet_units:
       - name: twice
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
           [Install]
           WantedBy=default.target
@@ -196,14 +207,14 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/bound
+    quadlet_directory: "{{ quadlet_proof }}/bound"
     quadlet_default_memory: 256M
     quadlet_units:
       - name: memory
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
           [Service]
           MemoryMax = 1G
@@ -218,7 +229,7 @@
 
     - name: The product's default drop-in is not written over the site's value
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/bound/memory.container.d/50-default-memory.conf
+        path: "{{ quadlet_proof }}/bound/memory.container.d/50-default-memory.conf"
       register: quadlet_bound
 
     - name: The site's value stays the only one
@@ -235,7 +246,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/withdraw-hardening
+    quadlet_directory: "{{ quadlet_proof }}/withdraw-hardening"
     quadlet_hardened_defaults: true
     quadlet_units: []
   tasks:
@@ -246,7 +257,7 @@
 
     - name: The hardening drop-in exists
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/withdraw-hardening/container.d/10-container-edition.conf
+        path: "{{ quadlet_proof }}/withdraw-hardening/container.d/10-container-edition.conf"
       register: quadlet_hardening_written
 
     - name: The first run wrote the hardening drop-in
@@ -263,7 +274,7 @@
 
     - name: The withdrawn hardening drop-in is gone
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/withdraw-hardening/container.d/10-container-edition.conf
+        path: "{{ quadlet_proof }}/withdraw-hardening/container.d/10-container-edition.conf"
       register: quadlet_hardening_removed
 
     - name: Nothing of the product is left behind
@@ -280,14 +291,14 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/withdraw-unit
+    quadlet_directory: "{{ quadlet_proof }}/withdraw-unit"
     quadlet_default_memory: 256M
     quadlet_units:
       - name: bounded
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
           [Install]
           WantedBy=default.target
@@ -299,7 +310,7 @@
 
     - name: The product's bound was written
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/withdraw-unit/bounded.container.d/50-default-memory.conf
+        path: "{{ quadlet_proof }}/withdraw-unit/bounded.container.d/50-default-memory.conf"
       register: quadlet_unit_bound
 
     - name: The first run wrote the bound
@@ -319,12 +330,12 @@
 
     - name: The unit file is gone
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/withdraw-unit/bounded.container
+        path: "{{ quadlet_proof }}/withdraw-unit/bounded.container"
       register: quadlet_unit_gone
 
     - name: The bound the product owned is gone
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/withdraw-unit/bounded.container.d/50-default-memory.conf
+        path: "{{ quadlet_proof }}/withdraw-unit/bounded.container.d/50-default-memory.conf"
       register: quadlet_unit_bound_gone
 
     - name: Nothing the product owned for that unit is left behind
@@ -342,7 +353,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: true
-    quadlet_directory: /tmp/opencode/quadlet-proof/verify-without-reload
+    quadlet_directory: "{{ quadlet_proof }}/verify-without-reload"
   tasks:
     - name: The read-back without a reload fails the run
       block:
@@ -406,3 +417,1176 @@
           - "'VACUOUS' not in podman_refusal"
           - "'podman_linger' in podman_refusal"
         fail_msg: "{{ podman_refusal | default('the include did not fail') }}"
+
+- name: A published host port below the unprivileged floor is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/port-floor"
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: 1024
+    quadlet_units:
+      - name: lowport
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          PublishPort=443:443
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The low port fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a published host port below the floor was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the port floor, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'443' in quadlet_refusal"
+          - "'unprivileged floor' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A high port and a template name are accepted and written
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/port-template"
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: 1024
+    quadlet_units:
+      - name: highport
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          PublishPort=8443:443
+
+          [Install]
+          WantedBy=default.target
+      - name: probe@
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+          [Install]
+          WantedBy=default.target
+          DefaultInstance=probe
+  tasks:
+    - name: The declarations are applied
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+
+    - name: The template unit is read
+      ansible.builtin.stat:
+        path: "{{ quadlet_directory }}/probe@.container"
+      register: quadlet_template_unit
+
+    - name: The high port is read
+      ansible.builtin.slurp:
+        src: "{{ quadlet_directory }}/highport.container"
+      register: quadlet_high_port
+
+    - name: The template name and the high port are accepted
+      ansible.builtin.assert:
+        that:
+          - quadlet_template_unit.stat.isreg | default(false)
+          - "'PublishPort=8443:443' in (quadlet_high_port.content | b64decode)"
+
+- name: A port written with spaces around the equal sign is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/spaced-port"
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: 1024
+    quadlet_units:
+      - name: spacedport
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          PublishPort = 443:443
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The spaced low port fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a spaced low port was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the spaced port, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'443' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A port range below the floor is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/port-range"
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: 1024
+    quadlet_units:
+      - name: rangedport
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          PublishPort=443-445:443-445
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The low range fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a low port range was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the range, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'443' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: The kernel floor is read when no floor is declared
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/kernel-floor"
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: ""
+    quadlet_units:
+      - name: kernelfloor
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          PublishPort=443:443
+
+          [Install]
+          WantedBy=default.target
+  pre_tasks:
+    - name: The kernel floor is read
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: cat /proc/sys/net/ipv4/ip_unprivileged_port_start
+      register: quadlet_kernel_floor
+      changed_when: false
+
+  tasks:
+    - name: The low port fails the run against the kernel value
+      when: quadlet_kernel_floor.stdout | trim | int > 443
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: the kernel floor did not refuse the low port"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the kernel floor
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'443' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+      when: quadlet_kernel_floor.stdout | trim | int > 443
+
+- name: A template unit with [Install] but no DefaultInstance is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/template-default-instance"
+    quadlet_hardened_defaults: true
+    quadlet_units:
+      - name: "tpl@"
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The template without DefaultInstance fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a template with [Install] and no DefaultInstance was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on DefaultInstance, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'DefaultInstance' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A pod unit carrying PodmanArgs is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/podman-args"
+    quadlet_hardened_defaults: true
+    quadlet_units:
+      - name: privilegedpod
+        type: pod
+        content: |
+          [Pod]
+          PodName=privilegedpod
+          PodmanArgs=--privileged
+  tasks:
+    - name: The pod argument fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a pod unit carrying PodmanArgs was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the argument, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'PodmanArgs' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A container unmasking the systemd sandbox is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/unmask"
+    quadlet_hardened_defaults: true
+    quadlet_units:
+      - name: unmasked
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          Unmask=ALL
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The unmask key fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a unit with Unmask=ALL was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the sandbox key, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'Unmask' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A non-numeric port floor is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/port-floor-typo"
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: "word"
+    quadlet_units:
+      - name: floorword
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          PublishPort=443:443
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The word fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a non-numeric port floor was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the floor value, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'port number' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A declared drop-in is written, read back and removed when dropped
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/dropins"
+    quadlet_hardened_defaults: true
+    quadlet_units:
+      - name: tuned
+        type: container
+        dropins:
+          - name: 50-network.conf
+            content: |
+              [Container]
+              Network=host
+          - name: 60-nofile.conf
+            content: |
+              [Container]
+              LimitNOFILE=8192
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The declarations are applied
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+
+    - name: The declared drop-ins exist
+      ansible.builtin.stat:
+        path: "{{ quadlet_proof }}/dropins/tuned.container.d/{{ item }}"
+      loop:
+        - 50-network.conf
+        - 60-nofile.conf
+      register: quadlet_dropins_written
+
+    - name: The state file lists the drop-ins the role wrote
+      ansible.builtin.slurp:
+        src: "{{ quadlet_proof }}/dropins/tuned.container.d/.ansible-managed.json"
+      register: quadlet_dropins_state
+
+    - name: Every declared drop-in is on disk and in the state file
+      ansible.builtin.assert:
+        that:
+          - quadlet_dropins_written.results | rejectattr('stat.exists') | list | length == 0
+          - quadlet_dropins_state.content | b64decode | from_json
+            | sort == ['50-network.conf', '60-nofile.conf']
+
+    - name: The drop-in is dropped from the declaration
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+      vars:
+        quadlet_units:
+          - name: tuned
+            type: container
+            dropins:
+              - name: 60-nofile.conf
+                content: |
+                  [Container]
+                  LimitNOFILE=8192
+            content: |
+              [Container]
+              Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+              [Install]
+              WantedBy=default.target
+
+    - name: The dropped drop-in is gone
+      ansible.builtin.stat:
+        path: "{{ quadlet_proof }}/dropins/tuned.container.d/50-network.conf"
+      register: quadlet_dropin_dropped
+
+    - name: The remaining drop-in stays
+      ansible.builtin.stat:
+        path: "{{ quadlet_proof }}/dropins/tuned.container.d/60-nofile.conf"
+      register: quadlet_dropin_kept
+
+    - name: The unit and its drop-ins are private to the account
+      ansible.builtin.stat:
+        path: "{{ quadlet_proof }}/dropins/{{ item }}"
+      loop:
+        - tuned.container
+        - tuned.container.d/60-nofile.conf
+        - tuned.container.d/.ansible-managed.json
+      register: quadlet_private
+
+    - name: The unit text is written 0600
+      ansible.builtin.assert:
+        that:
+          - quadlet_private.results | map(attribute='stat.mode') | list == ['0600', '0600', '0600']
+        fail_msg: "{{ quadlet_private.results | map(attribute='stat.mode') | list }}"
+
+    - name: Only the withdrawn drop-in was removed
+      ansible.builtin.assert:
+        that:
+          - not quadlet_dropin_dropped.stat.exists
+          - quadlet_dropin_kept.stat.exists
+
+    - name: The unit drops every drop-in
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+      vars:
+        quadlet_units:
+          - name: tuned
+            type: container
+            content: |
+              [Container]
+              Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+              [Install]
+              WantedBy=default.target
+
+    - name: The last drop-in and the state file are gone
+      ansible.builtin.stat:
+        path: "{{ quadlet_proof }}/dropins/tuned.container.d/{{ item }}"
+      loop:
+        - 60-nofile.conf
+        - .ansible-managed.json
+      register: quadlet_dropins_empty
+
+    - name: A declaration without drop-ins leaves nothing the role wrote
+      ansible.builtin.assert:
+        that:
+          - quadlet_dropins_empty.results | selectattr('stat.exists') | list | length == 0
+
+- name: Withdrawing a unit removes the drop-ins the role wrote for it
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/withdraw-dropins"
+    quadlet_units:
+      - name: gone
+        type: container
+        dropins:
+          - name: 50-tuning.conf
+            content: |
+              [Container]
+              Network=host
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The unit is declared
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+
+    - name: The managed drop-in was written
+      ansible.builtin.stat:
+        path: "{{ quadlet_proof }}/withdraw-dropins/gone.container.d/50-tuning.conf"
+      register: quadlet_unit_dropin
+
+    - name: The first run wrote the drop-in
+      ansible.builtin.assert:
+        that:
+          - quadlet_unit_dropin.stat.exists
+
+    - name: The unit is withdrawn
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+      vars:
+        quadlet_units:
+          - name: gone
+            type: container
+            state: absent
+
+    - name: The drop-in the role wrote is gone with the unit
+      ansible.builtin.stat:
+        path: "{{ quadlet_proof }}/withdraw-dropins/gone.container.d/{{ item }}"
+      loop:
+        - 50-tuning.conf
+        - .ansible-managed.json
+      register: quadlet_unit_dropins_gone
+
+    - name: Nothing the role wrote for that unit is left behind
+      ansible.builtin.assert:
+        that:
+          - quadlet_unit_dropins_gone.results | selectattr('stat.exists') | list | length == 0
+
+- name: A drop-in that is incomplete is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/bad-dropins"
+    quadlet_units:
+      - name: badname
+        type: container
+        dropins:
+          - name: tuning
+            content: |
+              [Container]
+              Network=host
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The drop-in without a .conf name fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a drop-in name without .conf was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the drop-in name, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'.conf' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+    - name: The product's own drop-in name is refused
+      vars:
+        quadlet_units:
+          - name: productname
+            type: container
+            dropins:
+              - name: 50-default-memory.conf
+                content: |
+                  [Service]
+                  MemoryMax=1G
+            content: |
+              [Container]
+              Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+              [Install]
+              WantedBy=default.target
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: the product's own drop-in name was accepted"
+      rescue:
+        - name: The product-name refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the product's name, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'50-default-memory.conf' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+    - name: Two drop-ins of one name are refused
+      vars:
+        quadlet_units:
+          - name: twice
+            type: container
+            dropins:
+              - name: 50-one.conf
+                content: |
+                  [Container]
+                  Network=host
+              - name: 50-one.conf
+                content: |
+                  [Container]
+                  ReadOnly=false
+            content: |
+              [Container]
+              Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+              [Install]
+              WantedBy=default.target
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: two drop-ins of one name were accepted"
+      rescue:
+        - name: The duplicate refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the duplicate, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'uniquely' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+    - name: Drop-ins on an absent unit are refused
+      vars:
+        quadlet_units:
+          - name: absentdropin
+            type: container
+            state: absent
+            dropins:
+              - name: 50-tuning.conf
+                content: |
+                  [Container]
+                  Network=host
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: drop-ins on an absent unit were accepted"
+      rescue:
+        - name: The absent-unit refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the absent unit, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'absent' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A drop-in carrying a bypass key is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/dropin-bypass"
+    quadlet_hardened_defaults: true
+    quadlet_units:
+      - name: bypassed
+        type: container
+        dropins:
+          - name: 50-privileged.conf
+            content: |
+              [Container]
+              Privileged=true
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The privileged drop-in fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a drop-in carrying Privileged=true was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the bypass key, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'Privileged' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: An image named by tag is refused, unless the unit opts out
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/image-digest"
+    quadlet_units:
+      - name: floated
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The tag-only image fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: an image named by tag was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the digest, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'without a digest' in quadlet_refusal"
+          - "'docker.io/library/alpine:3.20' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+    - name: The unit opts out of the digest requirement
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+      vars:
+        quadlet_units:
+          - name: floated
+            type: container
+            image_digest: false
+            content: |
+              [Container]
+              Image=docker.io/library/alpine:3.20
+
+              [Install]
+              WantedBy=default.target
+
+    - name: The opted-out unit is written
+      ansible.builtin.stat:
+        path: "{{ quadlet_proof }}/image-digest/floated.container"
+      register: quadlet_floated_written
+
+    - name: The opt-out is the site's explicit choice
+      ansible.builtin.assert:
+        that:
+          - quadlet_floated_written.stat.exists
+
+- name: A digest that is not the full sha256 is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/image-short-digest"
+    quadlet_units:
+      - name: shortdigest
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:deadbeef
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The truncated digest fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a truncated digest was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the digest length, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'without a digest' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A boot key outside [Install] does not satisfy the contract
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/install-section"
+    quadlet_units:
+      - name: misplaced
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          WantedBy=default.target
+
+          [Install]
+  tasks:
+    - name: The misplaced boot key fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a boot key outside [Install] was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the section, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'[Install]' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A drop-in cannot publish a port below the floor
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/dropin-port"
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: 1024
+    quadlet_units:
+      - name: dropinport
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          PublishPort=8443:443
+
+          [Install]
+          WantedBy=default.target
+        dropins:
+          - name: 50-port.conf
+            content: |
+              [Container]
+              PublishPort=443:443
+  tasks:
+    - name: The drop-in port fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a drop-in published a port below the floor"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the drop-in port, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'443' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A drop-in cannot name an image by tag
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/dropin-image"
+    quadlet_units:
+      - name: dropinimage
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+          [Install]
+          WantedBy=default.target
+        dropins:
+          - name: 50-image.conf
+            content: |
+              [Container]
+              Image=docker.io/library/alpine:3.20
+  tasks:
+    - name: The drop-in image fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a drop-in named an image by tag"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the drop-in image, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'without a digest' in quadlet_refusal"
+          - "'docker.io/library/alpine:3.20' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A container may reference a declared .image unit
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/image-reference"
+    quadlet_units:
+      - name: base
+        type: image
+        content: |
+          [Image]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+      - name: app
+        type: container
+        content: |
+          [Container]
+          Image=base.image
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The declarations are applied
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+
+    - name: The .image reference is written
+      ansible.builtin.stat:
+        path: "{{ quadlet_proof }}/image-reference/app.container"
+      register: quadlet_image_reference
+
+    - name: A .image reference is not a floating tag
+      ansible.builtin.assert:
+        that:
+          - quadlet_image_reference.stat.exists
+
+- name: The run's proof root is removed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: The proof root is removed
+      ansible.builtin.file:
+        path: "{{ quadlet_proof }}"
+        state: absent

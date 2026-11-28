@@ -6,6 +6,7 @@ exclude_paths:
   - inventories/**/vault.yml
 skip_list:
   - name[template]
+  - meta-runtime[unsupported-version]
 warn_list:
   - experimental
   - var-naming[no-role-prefix]

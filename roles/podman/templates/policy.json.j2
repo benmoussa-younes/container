@@ -1,0 +1,7 @@
+{% set accept = [{'type': 'insecureAcceptAnything'}] %}
+{{ {
+  'default': [{'type': 'reject'}],
+  'transports': {
+    'docker': dict(podman_registries | product([accept]) | list)
+  }
+} | to_nice_json }}

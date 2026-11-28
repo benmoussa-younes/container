@@ -36,20 +36,26 @@
           - account_sandbox_home.stat.isdir | default(false)
           - account_sandbox_home.stat.pw_name | default('') == account_name
 
-    - name: The relocated engine configuration exists
+    - name: The account's engine configuration is read
       ansible.builtin.slurp:
-        src: "{{ item }}"
+        src: "{{ account_sandbox_passwd[4] }}/.config/containers/{{ item }}"
       register: podman_sandbox_files
       loop:
-        - "{{ podman_sandbox }}/containers.conf.d/99-container-podman.conf"
-        - "{{ podman_sandbox }}/registries.conf.d/99-container-podman.conf"
+        - containers.conf
+        - registries.conf
+        - policy.json
 
     - name: The engine defaults are the product's
       ansible.builtin.assert:
         that:
-          - "'no_new_privileges = true' in podman_sandbox_engine"
           - "'pids_limit = 512' in podman_sandbox_engine"
           - "'runtime = \"crun\"' in podman_sandbox_engine"
+          - "'read_only = true' in podman_sandbox_engine"
+          - "'seccomp_profile = \"/usr/share/containers/seccomp.json\"' in podman_sandbox_engine"
+          - "'userns = \"host\"' in podman_sandbox_engine"
+          - "'default_ulimits = [\"nofile=1024:4096\"]' in podman_sandbox_engine"
+          - "'pull_policy = \"missing\"' in podman_sandbox_engine"
+          - "'default_rootless_network_cmd = \"pasta\"' in podman_sandbox_engine"
         fail_msg: "{{ podman_sandbox_engine }}"
       vars:
         podman_sandbox_engine: "{{ podman_sandbox_files.results[0].content | b64decode }}"
@@ -58,9 +64,49 @@
       ansible.builtin.assert:
         that:
           - "'unqualified-search-registries = [\"docker.io\"]' in podman_sandbox_registries"
+          - "'short-name-mode = \"enforcing\"' in podman_sandbox_registries"
         fail_msg: "{{ podman_sandbox_registries }}"
       vars:
         podman_sandbox_registries: "{{ podman_sandbox_files.results[1].content | b64decode }}"
+
+    - name: The image policy is the product's
+      ansible.builtin.assert:
+        that:
+          - podman_sandbox_policy.default | map(attribute='type') | list == ['reject']
+          - podman_sandbox_policy.transports.docker.keys() | list == ['docker.io']
+        fail_msg: "{{ podman_sandbox_files.results[2].content | b64decode }}"
+      vars:
+        podman_sandbox_policy: "{{ podman_sandbox_files.results[2].content | b64decode | from_json }}"
+
+    - name: The engine reads the account's policy
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: podman image trust show --json
+      become: true
+      become_user: "{{ account_name }}"
+      vars:
+        podman_sandbox_uid: "{{ ansible_facts.getent_passwd[account_name][1] | default('') }}"
+        podman_sandbox_home: "{{ ansible_facts.getent_passwd[account_name][4] | default('/') }}"
+      environment:
+        HOME: "{{ podman_sandbox_home }}"
+        USER: "{{ account_name }}"
+        LOGNAME: "{{ account_name }}"
+        XDG_RUNTIME_DIR: "/run/user/{{ podman_sandbox_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ podman_sandbox_uid }}/bus"
+      register: podman_sandbox_trust
+      changed_when: false
+      failed_when: false
+
+    - name: The policy the engine loads rejects every other repository
+      ansible.builtin.assert:
+        that:
+          - podman_sandbox_trust.rc == 0
+          - podman_sandbox_trust.stdout | from_json
+            | selectattr('repo_name', 'equalto', 'default')
+            | map(attribute='type') | list == ['reject']
+          - podman_sandbox_trust.stdout | from_json
+            | selectattr('repo_name', 'equalto', 'docker.io')
+            | map(attribute='type') | list == ['accept']
+        fail_msg: "{{ podman_sandbox_trust.stdout | default('nothing') }}"
 
     - name: The account lingers
       ansible.builtin.command:  # noqa: command-instead-of-module
@@ -95,6 +141,63 @@
       ansible.builtin.assert:
         that:
           - podman_sandbox_socket.stdout | trim == 'active'
+
+    - name: The auto-update timer is read
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: systemctl --user is-active podman-auto-update.timer
+      become: true
+      become_user: "{{ account_name }}"
+      vars:
+        podman_sandbox_uid: "{{ ansible_facts.getent_passwd[account_name][1] | default('') }}"
+        podman_sandbox_home: "{{ ansible_facts.getent_passwd[account_name][4] | default('/') }}"
+      environment:
+        HOME: "{{ podman_sandbox_home }}"
+        USER: "{{ account_name }}"
+        LOGNAME: "{{ account_name }}"
+        XDG_RUNTIME_DIR: "/run/user/{{ podman_sandbox_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ podman_sandbox_uid }}/bus"
+      register: podman_sandbox_auto_update
+      changed_when: false
+      failed_when: false
+
+    - name: The auto-update timer is active
+      ansible.builtin.assert:
+        that:
+          - podman_sandbox_auto_update.stdout | trim == 'active'
+        fail_msg: "{{ podman_sandbox_auto_update.stdout | default('nothing') }}"
+
+    - name: The declared Quadlet unit is read back
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: systemctl --user cat sandbox-state-volume.service
+      become: true
+      become_user: "{{ account_name }}"
+      vars:
+        podman_sandbox_uid: "{{ ansible_facts.getent_passwd[account_name][1] | default('') }}"
+        podman_sandbox_home: "{{ ansible_facts.getent_passwd[account_name][4] | default('/') }}"
+      environment:
+        HOME: "{{ podman_sandbox_home }}"
+        USER: "{{ account_name }}"
+        LOGNAME: "{{ account_name }}"
+        XDG_RUNTIME_DIR: "/run/user/{{ podman_sandbox_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ podman_sandbox_uid }}/bus"
+      register: podman_sandbox_quadlet
+      changed_when: false
+      failed_when: false
+
+    # Quadlet merges a unit's `dropins` into the generated unit and does not
+    # name the input file there, so the read-back asserts the drop-in's effect:
+    # `Copy=true` comes from `sandbox-state.volume.d/50-copy.conf`.
+    - name: The generated unit carries the declared drop-in
+      ansible.builtin.assert:
+        that:
+          - podman_sandbox_quadlet.rc == 0
+          - "'Copy=true' in podman_sandbox_quadlet.stdout"
+          - "'SourcePath=' + sandbox_quadlet_source in podman_sandbox_quadlet.stdout"
+        fail_msg: "{{ podman_sandbox_quadlet.stdout | default('nothing') }}"
+      vars:
+        sandbox_quadlet_source: >-
+          {{ (ansible_facts.getent_passwd[account_name][4] | default('/'))
+             ~ '/.config/containers/systemd/sandbox-state.volume' }}
 
     - name: The kernel mapping is read
       ansible.builtin.command:  # noqa: command-instead-of-module

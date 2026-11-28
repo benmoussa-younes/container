@@ -119,6 +119,31 @@ function tracked_files(root: path) -> list<string> {
     }
 }
 
+function merged_files(root: path) -> list<string> {
+    let mutable files = tracked_files(root)
+    match process.run(process.request("git", ["ls-files", "--others", "--exclude-standard"]).with_working_directory(root)) {
+        ok(completed) => {
+            if completed.exit_code == 0 {
+                for line in completed.standard_output.lines() {
+                    files.append(line)
+                }
+            }
+        }
+        error(_failure) => {}
+    }
+    return files
+}
+
+function is_credential_path(file: string) -> boolean {
+    let names = ["auth.json", "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa", ".netrc", ".git-credentials"]
+    for name in names {
+        if file == name or file.ends_with("/" + name) {
+            return true
+        }
+    }
+    return file.ends_with(".pem") or file.ends_with(".key") or file.ends_with(".p12") or file.ends_with(".pfx") or file.ends_with(".env")
+}
+
 function any_prefix(text: string, prefixes: list<string>) -> boolean {
     for prefix in prefixes {
         if text.starts_with(prefix) {
@@ -167,7 +192,7 @@ function git_search(root: path, arguments: list<string>, name: string) -> list<s
 }
 
 function git_grep(root: path, flags: list<string>, pattern: string, paths: list<string>) -> list<string> {
-    let mutable arguments = ["grep", "-In", "--untracked"]
+    let mutable arguments = ["grep", "-n", "--untracked"]
     for flag in flags {
         arguments.append(flag)
     }
@@ -183,7 +208,17 @@ function git_grep(root: path, flags: list<string>, pattern: string, paths: list<
                 return completed.standard_output.lines()
             }
             if completed.exit_code == 1 {
-                return []
+                match process.run(process.request("git", ["ls-files", "--cached"]).with_working_directory(root)) {
+                    ok(indexed) => {
+                        if indexed.exit_code != 0 {
+                            return ["! git grep could not read the index ({indexed.exit_code}): {indexed.standard_error.trim_whitespace()}"]
+                        }
+                        return []
+                    }
+                    error(failure) => {
+                        return ["! cannot run git: {failure.kind}"]
+                    }
+                }
             }
             # A git error is not an empty result: the sentinel line belongs to no
             # owner, so a failure turns the check red instead of passing.
@@ -235,10 +270,10 @@ function lines_outside_directory(lines: list<string>, directory: string) -> list
     return outside
 }
 
-# One owner of `/etc/containers/*.conf.d/99-*-podman.conf`. The product
-# writes `99-container-podman.conf` from `roles/podman/`, and the retired
-# `99-podman.conf` survives only as a removal target. Untracked files count:
-# one is still a second writer on the machine that runs the role.
+# One owner of the host-wide `/etc/containers/*.conf.d/99-*-podman.conf` names.
+# The role writes the account's configuration in its home now; both host-wide
+# names survive only as removal targets. Untracked files count: one is still a
+# second writer on the machine that runs the role.
 function check_registries_owner(root: path) -> list<string> {
     let owner = "roles/podman/defaults/main.yml"
     let engine_dir = "roles/podman/"
@@ -272,16 +307,28 @@ function check_registries_owner(root: path) -> list<string> {
         result.append(problem)
     }
     # A writer may name one of the engine's variables instead of the path: the
-    # directory ones too, because a second file under the same directory is the
-    # collision this check exists for.
-    for variable in ["podman_registries_dir", "podman_registries_file", "podman_containers_dir", "podman_containers_file"] {
+    # account's configuration files too, because a second file beside them is
+    # the collision this check exists for.
+    for variable in ["podman_config_dir", "podman_containers_file", "podman_registries_file", "podman_policy_file", "podman_legacy_registries_dir", "podman_legacy_containers_dir"] {
         let lines = git_grep_literal(root, variable, code_paths)
         for problem in note(lines_outside_directory(lines, engine_dir).length() == 0, "engine configuration variable owner", lines_outside_directory(lines, engine_dir).join("; ")) {
             result.append(problem)
         }
     }
-    for problem in note(read_text(root, owner).contains("99-container-podman.conf"), "product drop-in name", "{owner} does not name `99-container-podman.conf`") {
+    # The account's files are the destinations; the two host-wide names are
+    # removal targets only. A task that writes `99-container-podman.conf` again
+    # would give the account two writers of one configuration.
+    let main = read_text(root, "roles/podman/tasks/main.yml")
+    for problem in note(not main.contains("99-container-podman.conf"), "host-wide drop-in removed only", "roles/podman/tasks/main.yml still writes `99-container-podman.conf`") {
         result.append(problem)
+    }
+    for problem in note(read_text(root, owner).contains("99-container-podman.conf"), "retired product drop-in removed", "{owner} does not name `99-container-podman.conf` in its removal list") {
+        result.append(problem)
+    }
+    for variable in ["podman_containers_file", "podman_registries_file", "podman_policy_file"] {
+        for problem in note(main.contains(variable), "account configuration written", "roles/podman/tasks/main.yml does not write `{variable}`") {
+            result.append(problem)
+        }
     }
     # The removal task has a file of its own, so the state asserted here is the
     # state of that task and not of another `state: absent` in the role.
@@ -290,6 +337,35 @@ function check_registries_owner(root: path) -> list<string> {
         result.append(problem)
     }
     for problem in note(read_text(root, "roles/podman/tasks/main.yml").contains("include_tasks: stale.yml"), "stale drop-in included", "roles/podman/tasks/main.yml does not include `stale.yml`") {
+        result.append(problem)
+    }
+    return result
+}
+
+# The base image is built by the site, not here (a container build in CI is a
+# deliberate no-go), so the gate reads what can be read without a builder: the
+# digest the base is pinned to, the labels that name the product and the
+# licence, and the root state. A stale `version` label is what D42 found.
+function check_base_image(root: path) -> list<string> {
+    let image = read_text(root, "images/base/Containerfile")
+    let readme = read_text(root, "README.md")
+    let mutable result: list<string> = []
+    for problem in note(image.contains("@sha256:"), "base digest pinned", "images/base/Containerfile: FROM is not pinned by digest") {
+        result.append(problem)
+    }
+    for problem in note(image.contains("org.opencontainers.image.source=\"https://github.com/benmoussa-younes/container\""), "base source label", "images/base/Containerfile: the source label is missing") {
+        result.append(problem)
+    }
+    for problem in note(image.contains("org.opencontainers.image.licenses=\"AGPL-3.0-or-later\""), "base licence label", "images/base/Containerfile: the licence label is missing") {
+        result.append(problem)
+    }
+    for problem in note(image.contains("org.opencontainers.image.version=\"$\{VERSION\}\""), "base version from the build", "images/base/Containerfile: the version label is hardcoded") {
+        result.append(problem)
+    }
+    for problem in note(image.contains("passwd -l root"), "base root locked", "images/base/Containerfile: root is not locked") {
+        result.append(problem)
+    }
+    for problem in note(readme.contains("--build-arg VERSION"), "base build command passes the version", "README.md: the documented build does not pass VERSION") {
         result.append(problem)
     }
     return result
@@ -338,12 +414,12 @@ function check_subid_plan(root: path) -> list<string> {
         let base = fields.get_at_index(2).value_or("")
         let count = fields.get_at_index(3).value_or("")
         let user = fields.get_at_index(4).value_or("")
-        let passwd = fields.get_at_index(5).value_or("")
+        let passwd_fixture = fields.get_at_index(5).value_or("")
         let group = fields.get_at_index(6).value_or("")
         let want = fields.get_at_index(7).value_or("")
         let uid = "tests/fixtures/subid/{fixture}.subuid"
         let gid = "tests/fixtures/subid/{fixture}.subgid"
-        let passwd_file = "tests/fixtures/subid/{passwd}"
+        let passwd_file = "tests/fixtures/subid/{passwd_fixture}"
         let group_file = "tests/fixtures/subid/{group}"
         let request = process.request("awk", [
             "-f", planner,
@@ -411,7 +487,7 @@ function check_subid_wiring(root: path) -> list<string> {
     for problem in note(apply.contains("podman_subid_map_lines") and apply.contains("regex_replace"), "subid map normalised", "roles/podman/tasks/subuid.yml compares the kernel's padded map lines without normalising them") {
         result.append(problem)
     }
-    for problem in note(defaults.contains("catatonit"), "init package declared", "roles/podman/defaults/main.yml does not install catatonit, which the Quadlet default `RunInit=true` needs") {
+    for problem in note(defaults.matches(r"(?m)^[ \t]*-[ \t]+catatonit[ \t]*$").value_or(false), "init package declared", "roles/podman/defaults/main.yml does not list catatonit as a package, which the Quadlet default `RunInit=true` needs") {
         result.append(problem)
     }
     return result
@@ -466,10 +542,18 @@ function check_paths(root: path) -> list<string> {
         if file.starts_with(".opencode/") {
             forbidden.append(file)
         }
+        if file.starts_with(".ansible/") or file.starts_with("dist/") or file.starts_with("artifacts/") {
+            forbidden.append(file)
+        }
         if file.starts_with("inventories/") and not file.starts_with("inventories/example/") {
             forbidden.append(file)
         }
         if file.starts_with("scripts/") or file.ends_with(".bcs") {
+            forbidden.append(file)
+        }
+    }
+    for file in merged_files(root) {
+        if is_credential_path(file) {
             forbidden.append(file)
         }
     }
@@ -483,6 +567,7 @@ function check_required(root: path) -> list<string> {
     let required = [
         "VERSION",
         "galaxy.yml",
+        "requirements-dev.txt",
         "meta/runtime.yml",
         "README.md",
         "CHANGELOG.md",
@@ -704,7 +789,7 @@ function check_archive(root: path) -> list<string> {
                                     ]
                                     let mutable present: list<string> = []
                                     for entry in entries {
-                                        if not any_prefix(entry, shipped) {
+                                        if not any_prefix(entry, shipped) or is_credential_path(entry) {
                                             present.append(entry)
                                         }
                                     }
@@ -768,6 +853,9 @@ for problem in check_documented_versions(root) {
 for problem in check_registries_owner(root) {
     failures.append(problem)
 }
+for problem in check_base_image(root) {
+    failures.append(problem)
+}
 for problem in check_subid_plan(root) {
     failures.append(problem)
 }
@@ -777,7 +865,25 @@ for problem in check_subid_wiring(root) {
 for problem in check_licences(root, false) {
     failures.append(problem)
 }
-for problem in git_search(root, ["grep", "--cached", "-IniE", "-e", secrets.joined(), "--", ".", ":(exclude)tools", ":(exclude)LICENSES"], "no secret shape") {
+function check_secret_shapes(root: path) -> list<string> {
+    let matches = git_grep(root, ["-i", "--extended-regexp"], secrets.joined(), [".", ":(exclude)LICENSES", ":(exclude)tools/scripts/modules/secrets.scs", ":(exclude)inventories"])
+    let mutable result = note(matches.length() == 0, "no secret shape", matches.join(", "))
+    # `ansible-galaxy collection build` reads the working tree, not the index:
+    # an ignored file under a shipped directory would reach the archive while
+    # `git grep --untracked` skips it. `--no-exclude-standard` includes those
+    # files, so a credential in one is caught before it is packaged.
+    let shipped = ["roles", "playbooks", "meta", "images", "LICENSES"]
+    let ignored = git_grep(root, ["-i", "--extended-regexp", "--no-exclude-standard"], secrets.joined(), shipped)
+    for problem in note(ignored.length() == 0, "no secret shape in shipped files", ignored.join(", ")) {
+        result.append(problem)
+    }
+    for problem in git_search(root, ["grep", "--cached", "-IniE", "-e", secrets.joined(), "--", "inventories"], "no secret shape in tracked inventories") {
+        result.append(problem)
+    }
+    return result
+}
+
+for problem in check_secret_shapes(root) {
     failures.append(problem)
 }
 for problem in execute(root, process.request("ansible-lint", ["playbooks", "roles", "tests"]), "ansible-lint") {

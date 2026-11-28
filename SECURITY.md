@@ -19,9 +19,13 @@ warranty, as stated in [`LICENSE`](LICENSE) and `LICENSES/`.
 
 ## Reporting a vulnerability
 
-Do not open a public issue. Report it privately to:
+Do not open a public issue. Report it privately through GitHub's private
+vulnerability reporting (Security -> Report a vulnerability) or by email to:
 
 **younes.benmoussa@pm.me**
+
+There is no published encryption key for the security contact: use the private
+GitHub report when the material must stay encrypted in transit.
 
 Include:
 
@@ -41,6 +45,8 @@ In scope:
 
 - the roles in `roles/`, the playbook, the collection archive and the
   repository tooling;
+- the base image (`images/base/Containerfile`) and its pinned digest;
+- the two GitHub workflows (`.github/workflows/ci.yml` and `release.yml`);
 - the engine configuration the role writes: registry search path, engine
   drop-in, user socket, linger and subordinate IDs;
 - a defect that makes a correct machine fail or a converge unsafe.
@@ -71,8 +77,10 @@ The product declares:
   a range another account holds, a range shorter than the declared count, a
   range in one file only or two ranges in one file fail the run; the repair
   removes only this account's ranges and is opt-in (`podman_subuid_repair`);
-- one configuration drop-in per concern, named `99-container-podman.conf`, so
-  the product never overwrites a site's own file.
+- the engine's configuration in the account's home
+  (`~/.config/containers/{containers,registries}.conf` and `policy.json`), and
+  no host-wide `/etc/containers` drop-in: the old `99-container-podman.conf` is
+  removed, and the product never overwrites a site's own file.
 
 Two facts a reader must not infer from this list:
 

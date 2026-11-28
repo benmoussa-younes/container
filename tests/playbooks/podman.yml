@@ -1,6 +1,6 @@
 ---
 # Proves the engine defaults the `podman` role writes, without root and without
-# Podman: the two templates are rendered with the role's own defaults, loaded
+# Podman: the three templates are rendered with the role's own defaults, loaded
 # from `defaults/main.yml`, and the values a product decides are asserted one by
 # one. A deleted line in a template fails here; the gate would otherwise stay
 # green, because nothing else reads them.
@@ -22,7 +22,7 @@
         state: directory
         mode: "0755"
 
-    - name: The two templates are rendered where the host would read them
+    - name: The three templates are rendered where the host would read them
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../roles/podman/templates/{{ item }}"
         dest: "{{ podman_proof }}/{{ item | regex_replace('\\.j2$', '') }}"
@@ -30,6 +30,7 @@
       loop:
         - containers.conf.j2
         - registries.conf.j2
+        - policy.json.j2
 
     - name: The rendered files are read
       ansible.builtin.slurp:
@@ -37,6 +38,7 @@
       loop:
         - containers.conf
         - registries.conf
+        - policy.json
       register: podman_proof_files
 
     - name: The engine and container settings are the product's
@@ -45,10 +47,38 @@
           - podman_rendered_engine is search('(?m)^cgroup_manager = "systemd"$')
           - podman_rendered_engine is search('(?m)^events_logger = "journald"$')
           - podman_rendered_engine is search('(?m)^runtime = "crun"$')
-          - podman_rendered_engine is search('(?m)^no_new_privileges = true$')
           - podman_rendered_engine is search('(?m)^pids_limit = 512$')
           - podman_rendered_engine is search('(?m)^log_size_max = 10485760$')
           - podman_rendered_engine is search('(?m)^umask = "0077"$')
+          - podman_rendered_engine is search('(?m)^read_only = true$')
+          - podman_rendered_engine is search('(?m)^seccomp_profile = "/usr/share/containers/seccomp.json"$')
+          - podman_rendered_engine is search('(?m)^userns = "host"$')
+          - podman_rendered_engine is search('(?m)^default_ulimits = \["nofile=1024:4096"\]$')
+          - podman_rendered_engine is search('(?m)^pull_policy = "missing"$')
+          - podman_rendered_engine is search('(?m)^default_rootless_network_cmd = "pasta"$')
+        fail_msg: "{{ podman_rendered_engine }}"
+      vars:
+        podman_rendered_engine: "{{ podman_proof_files.results[0].content | b64decode }}"
+
+    # `pull_policy` is an engine key; in `[containers]` Podman 5.4.2 accepts
+    # and ignores it (measured: a create with the key in `[containers]` still
+    # pulls, with it in `[engine]` it fails "image not known"). The key is
+    # asserted inside the engine block, not merely in the file.
+    - name: The engine keys sit in the engine table
+      ansible.builtin.assert:
+        that:
+          - podman_engine_section is search('(?m)^pull_policy = "missing"$')
+        fail_msg: "{{ podman_engine_section }}"
+      vars:
+        podman_rendered_engine: "{{ podman_proof_files.results[0].content | b64decode }}"
+        podman_engine_section: >-
+          {{ podman_rendered_engine
+             | regex_findall('(?ms)^\[engine\][ \t]*\n(.*?)(?=^\[)') | join('\n') }}
+
+    - name: The inert key is not written
+      ansible.builtin.assert:
+        that:
+          - "podman_rendered_engine is not search('(?m)^no_new_privileges[ \\t]*=')"
         fail_msg: "{{ podman_rendered_engine }}"
       vars:
         podman_rendered_engine: "{{ podman_proof_files.results[0].content | b64decode }}"
@@ -57,8 +87,55 @@
       ansible.builtin.assert:
         that:
           - podman_rendered_registries is search('(?m)^unqualified-search-registries = \["docker.io"\]$')
+          - podman_rendered_registries is search('(?m)^short-name-mode = "enforcing"$')
         fail_msg: "{{ podman_rendered_registries }}"
       # `include_vars` outranks task vars, so the rendered text is never named
       # after a role variable: `podman_registries` would still be the list.
       vars:
         podman_rendered_registries: "{{ podman_proof_files.results[1].content | b64decode }}"
+
+    - name: The image policy is the product's
+      ansible.builtin.assert:
+        that:
+          - podman_rendered_policy.default | map(attribute='type') | list == ['reject']
+          - podman_rendered_policy.transports.docker.keys() | list == ['docker.io']
+          - podman_rendered_policy.transports.docker['docker.io']
+            | map(attribute='type') | list == ['insecureAcceptAnything']
+        fail_msg: "{{ podman_proof_files.results[2].content | b64decode }}"
+      vars:
+        podman_rendered_policy: "{{ podman_proof_files.results[2].content | b64decode | from_json }}"
+
+    # `include_vars` outranks task vars, and a `set_fact` outranks
+    # `include_vars`: the defaults are loaded a second time under the value this
+    # case needs.
+    - name: A second search registry is declared
+      ansible.builtin.set_fact:
+        podman_registries:
+          - docker.io
+          - quay.io
+
+    - name: A second search registry is also accepted by the policy
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/podman/templates/policy.json.j2"
+        dest: "{{ podman_proof }}/policy-two.json"
+        mode: "0644"
+
+    - name: The policy follows the declared registries
+      ansible.builtin.assert:
+        that:
+          - podman_rendered_two.transports.docker.keys() | sort == ['docker.io', 'quay.io']
+          - "'quay.io' not in (podman_proof_files.results[2].content | b64decode)"
+        fail_msg: "{{ podman_rendered_two | to_nice_json }}"
+      vars:
+        podman_rendered_two: "{{ lookup('file', podman_proof ~ '/policy-two.json') | from_json }}"
+
+- name: The role's argument spec resolves before the account is read
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    container_host_edition: server
+    podman_enabled: false
+    podman_userns_sysctl: /tmp/opencode/podman-proof-userns/62-podman-userns.conf
+  roles:
+    - role: podman

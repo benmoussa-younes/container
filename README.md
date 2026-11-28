@@ -10,8 +10,8 @@ declarations run on. The product owns the engine, the generator's input and the
 base; the definitions themselves — ports, volumes, networks, secrets — remain
 the site's.
 
-It installs on a host that already carries an edition — Server Edition or
-Workstation Edition — and it **writes no host identity**: no `os-release` of
+It installs on a host that already carries an edition — Server Edition today;
+a Workstation Edition host is refused — and it **writes no host identity**: no `os-release` of
 its own, no login banner, no boot splash, no version line of its own. The one
 account it creates is the engine's own, and the site declares its name, UID and
 GID. The edition says what the machine is; this collection says what it runs.
@@ -24,29 +24,51 @@ It is shipped as the collection `benmoussa.container`.
   uid/gid 1500 by default, and the name, the UID, the GID, the home and the
   shell are the site's. It refuses to move an existing identity: an account
   whose UID differs fails the run, it is never rewritten.
-- **One rootless engine**: packages, registry search path, the engine's
-  drop-in, the user socket, linger and subordinate IDs. The rootful socket is
-  never enabled and `/etc/containers/systemd` is never written.
+- **One rootless engine**: packages, registry search path, the account's
+  engine configuration, the user socket, linger, subordinate IDs and the opt-in
+  auto-update timer. The read-back refuses a `vfs` store, a cgroup other than
+  v2 and a network backend other than netavark. The rootful socket is never
+  enabled and `/etc/containers/systemd` is never written.
 - **Subordinate IDs that are planned, not guessed**: the role computes the
   account's range from `/etc/subuid` and `/etc/subgid`, refuses one another
   account already holds, adds the first free block when the account has none,
   lets the engine adopt it (`podman system migrate`) and reads the kernel's
   `uid_map` and `gid_map` back. A host that delegates subordinate IDs to an NSS
   provider is refused, because the role reads the files.
-- **The engine's defaults, decided**: Debian leaves `no_new_privileges` off,
-  the log size unbounded and the pids limit at 1024. The product turns the
-  first on, bounds the other two, sets `umask` 0077 and names the `crun`
-  runtime.
-- **One writer per file**: the engine writes `99-container-podman.conf` and
-  removes the `99-podman.conf` the retired edition roles left under the same
-  directories, so the lexical order of `99-*.conf` can no longer make an old
-  file win.
+- **The engine's defaults, decided**: Debian leaves the root file system
+  writable and the pids limit at 1024. The product makes the root read-only,
+  bounds the pids and the nofile ulimit, sets `umask` 0077, names the `crun`
+  runtime, keeps the distribution's seccomp profile and the caller's user
+  namespace, and pulls an image only when it is missing. Container logs go to
+  journald, whose retention belongs to the host journal: `log_size_max` only
+  bounds the file driver, which the product's units do not use.
+  `no_new_privileges` is deliberately absent: Podman 5.4.2 accepts the key and
+  never applies it (measured), so the product's Quadlet units carry
+  `NoNewPrivileges=true` in the hardening drop-in instead, and an ad-hoc run
+  declares `--security-opt no-new-privileges`.
+- **The configuration belongs to the account**: Podman reads
+  `~/.config/containers/{containers,registries}.conf` and `policy.json` for one
+  user before the host-wide files, and for `registries.conf` and `policy.json`
+  the user file replaces the host-wide one. The role writes there, owned by the
+  account, and never into `/etc/containers`: root and every other user keep
+  their engine. The host-wide `99-container-podman.conf` and `99-podman.conf`
+  the older versions and the retired edition roles left are removed, so exactly
+  one file owns each configuration.
+- **An image policy**: the account's `policy.json` accepts only the registries
+  `podman_registries` declares and rejects every other repository, and
+  `short-name-mode = "enforcing"` refuses an ambiguous short name outside a
+  terminal. A declared `.container` or `.image` names its image by digest
+  (`@sha256:` with the 64 hex characters), or a `.container` references a
+  `.image` unit by name (`base.image`, whose own `Image=` is checked);
+  `image_digest: false` is the per-unit opt-out.
 - **An edition it reads, never writes**: `container_host_edition` names the
   edition the host already carries (`server` today). Applying the engine role
   without it, or with another value, fails the run instead of guessing.
 - **The site's Quadlet declarations**: `container`, `volume`, `network`, `pod`,
-  `image`, `build` and `kube` files in the owning account's generator
-  directory, a user-manager reload and a read-back of every generated unit.
+  `image`, `build` and `kube` files, including template names
+  (`foo@.container`) and their drop-ins, in the owning account's generator
+  directory, a user-manager reload and a read-back of every generated unit;
+  the sandbox asserts that a declared drop-in is merged into it.
 - **A hardening baseline in one drop-in**: `container.d/*.conf` is merged into
   every container unit of the account — no new privileges, all capabilities
   dropped, read-only rootfs with tmpfs, an init, pids and ulimit bounds,
@@ -55,6 +77,9 @@ It is shipped as the collection `benmoussa.container`.
   `User=0`, `NoNewPrivileges=false`, `ReadOnly=false` or
   `SecurityLabelDisable=true` fails the run while the hardened defaults are on.
   The match ignores the spacing around `=`, so `Network = host` is refused too.
+  Any `PodmanArgs`, `GlobalArgs`, `Unmask`, `SeccompProfile` or `Privileged`
+  key is refused in any unit type, whatever its value: those keys bypass the
+  drop-in rather than relax one setting.
 - **A base image**: the Debian minimal base pinned by digest, TLS roots,
   `tzdata`, `curl`, `procps` and the Scripts interpreter, one non-root
   account, a locked root and no setuid bit. The image keeps Debian's own
@@ -63,9 +88,9 @@ It is shipped as the collection `benmoussa.container`.
 
 ## Requirements
 
-- a target running **Debian 13** (`trixie`), the release both editions support
-  today, with the engine packages taken from the distribution;
-- `ansible-core` **2.19 or later** on the controller, with SSH access to the
+- a target running **Debian 13** (`trixie`), the release the supported edition
+  runs today, with the engine packages taken from the distribution;
+- `ansible-core` **2.20 or later, below 2.23** on the controller, with SSH access to the
   target;
 - no pre-existing account: the collection creates the engine's own login
   account (`container`, uid/gid 1500 by default), and the name, UID and GID
@@ -100,6 +125,8 @@ checksums before installing:
 
 ```sh
 sha256sum -c SHA256SUMS
+gpg --verify SHA256SUMS.asc SHA256SUMS   # when the release carries the maintainer's signature
+gh attestation verify benmoussa-container-0.3.0.tar.gz --repo benmoussa-younes/container
 ```
 
 ## Usage
@@ -205,8 +232,12 @@ root, no setuid bit and no package list. It writes nothing outside a tmpfs,
 which is what makes the read-only defaults of the Quadlet role usable.
 
 ```sh
-podman build -t localhost/benmoussa/container:0.1.0 images/base
-podman run --rm localhost/benmoussa/container:0.1.0 sh -c 'id; cat /etc/os-release'
+podman build \
+  --build-arg VERSION="$(cat VERSION)" \
+  --build-arg REVISION="$(git rev-parse HEAD)" \
+  --build-arg CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -t localhost/benmoussa/container:test images/base
+podman run --rm localhost/benmoussa/container:test sh -c 'id; cat /etc/os-release'
 ```
 
 The image is not built by the roles: the product ships the `Containerfile`, the
@@ -218,8 +249,8 @@ inside keep their own licences (see `NOTICE`).
 | Role | Purpose | Status |
 |---|---|---|
 | `account` | The login account the rootless engine runs as: the group, the account, its UID, GID, home and shell. The name, UID and GID are inventory values (`container`, 1500:1500 by default). It refuses to rewrite an existing identity and creates no subordinate ID, no linger and no engine configuration. | implemented |
-| `podman` | The rootless engine for the account `account` creates: packages, registry search path, engine drop-in with the product's defaults, user socket, linger and subordinate IDs. It creates no container and never enables the rootful socket. | implemented |
-| `quadlet` | The site's Quadlet declarations, the product's global hardening drop-in, the refusal of keys that relax it, a user-manager reload and a read-back of every generated unit. It creates no image, volume, network, pod or container. | implemented |
+| `podman` | The rootless engine for the account `account` creates: packages, the account's `containers.conf`, `registries.conf` and `policy.json` (`read_only`, bounded pids and nofile, `umask`, `crun`, the distribution's seccomp profile, the caller's user namespace, `pull_policy`, an enforcing short-name mode and a policy that accepts only the declared registries), user socket, the opt-in auto-update timer, linger and subordinate IDs. The read-back refuses a `vfs` store, a cgroup other than v2 and a backend other than netavark. It creates no container and never enables the rootful socket. | implemented |
+| `quadlet` | The site's Quadlet declarations (template names and drop-ins included), the published host-port floor, the product's global hardening drop-in, the refusal of keys that relax it and of the argument/sandbox keys whatever their value, a user-manager reload and a read-back of every generated unit. It creates no image, volume, network, pod or container. | implemented |
 
 `playbooks/site.yml` runs `account`, `podman` then `quadlet`, all opt-in with
 `account_enabled`, `podman_enabled` and `quadlet_enabled`. The account comes
@@ -247,6 +278,16 @@ unit back with `systemctl --user cat <unit>`, so a declaration the generator
 ignored fails the run. `state: absent` removes the file, the two bound drop-ins
 the product wrote beside it, and reloads the manager.
 
+An entry may also carry `dropins`: a list of `{name, content}` files written
+into `<name>.<type>.d/`. Quadlet reads every `.conf` file there and merges it
+into the generated unit, which is the narrow way to relax one property without
+emptying `quadlet_forbidden` for every unit. The role refuses a name that does
+not end in `.conf` or that the product owns (`quadlet_product_dropins`), keeps
+the list it wrote in `<name>.<type>.d/.ansible-managed.json` (a name Quadlet
+ignores), and removes a drop-in the site stops declaring. Quadlet merges every
+declared `.conf` into the generated unit and does not name the input file
+there, so the sandbox asserts the drop-in's effect (`Copy=true`) instead.
+
 A `container` or `kube` unit must carry `[Install]` with `WantedBy=` or
 `RequiredBy=`: Quadlet applies that section at generation and starts nothing at
 boot without it, so a unit the product accepted would never come back after a
@@ -267,11 +308,16 @@ quadlet_units:
       Description=Example service
 
       [Container]
-      Image=docker.io/library/alpine:3.20
+      Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
       Exec=sleep infinity
 
       [Install]
       WantedBy=default.target
+    dropins:
+      - name: 50-nofile.conf
+        content: |
+          [Container]
+          LimitNOFILE=8192
 ```
 
 ### Hardening defaults
@@ -279,8 +325,10 @@ quadlet_units:
 `quadlet_hardened_defaults: true` writes
 `container.d/10-container-edition.conf` in the account's generator directory.
 Quadlet merges it into every `.container` file; a unit's own drop-in
-(`<name>.container.d/`) is merged after it and wins. Relax one key by adding
-that drop-in beside the unit, not by editing the product's file.
+(`<name>.container.d/`) is merged after it and wins. Relax one key by declaring
+it in that unit's `dropins`, not by editing the product's file. The
+argument/sandbox keys (`quadlet_forbidden_prefixes`) stay refused there too:
+they bypass the hardening drop-in rather than relax one property.
 
 `quadlet_forbidden` names the keys a declared unit may not carry while the
 defaults are on. Empty it deliberately if a site needs one.
@@ -289,14 +337,47 @@ defaults are on. Empty it deliberately if a site needs one.
 
 - It does not enable the rootful Podman socket, and it does not write
   `/etc/containers/systemd`.
+- It does not disable the account's `podman.socket` by default
+  (`podman_socket_enabled: true`): the socket's API carries the account's
+  engine rights, so exposing it over TCP or to another group widens what that
+  account can do. A site that runs only the CLI sets
+  `podman_socket_enabled: false`.
+- It does not add a mandatory access control layer: on Debian rootless Podman
+  reports `apparmorEnabled=false` and SELinux is not enabled, so the
+  distribution's seccomp profile is the confinement the engine applies. A site
+  that needs AppArmor or SELinux configures it on the host.
 - It does not build an image: it ships the base `Containerfile`, and the site
   runs `podman build`. It does not pull, start or stop a container, a pod, a
   volume or a network.
 - It does not set a password, a key or a privilege on the account it creates:
   the password stays locked, and the site owns the keys and the `sudo` rule.
 - It does not store a secret, a registry credential or a site definition.
+- It does not set `no_new_privileges` in `containers.conf`: Podman 5.4.2
+  accepts the key and never applies it (measured: `NoNewPrivs` stays 0 with the
+  key in either table, and turns 1 with `--security-opt no-new-privileges`).
+  The Quadlet hardening drop-in sets it for the product's units; an ad-hoc run
+  declares it itself.
 - It does not manage a firewall port for a unit: the site that publishes a port
-  declares it.
+  declares it. It refuses a declared `PublishPort` whose host port is below the
+  host's `net.ipv4.ip_unprivileged_port_start` (read from the kernel when
+  `quadlet_unprivileged_port_start` is empty): lower that sysctl or publish a
+  higher port.
+- It does not require a digest on a `.kube` unit (its images live in the YAML)
+  or a `.build` unit (it names a Containerfile the site owns): the digest rule
+  covers `.container` and `.image`, where `image_digest: false` is the opt-out.
+  `AutoUpdate=registry` needs the `podman-auto-update.timer`: the role enables
+  it when `podman_auto_update: true`.
+- It does not put a secret in a unit: `quadlet_units` is written `0600` and its
+  drop-ins too, so a credential left in the text is readable by the account
+  only; it is still not scanned for credentials, so keep one in the site's
+  vault and hand it to the container through the unit's own mechanism.
+- It waits up to 30 s for `/run/user/<uid>` after enabling linger; a slower host
+  fails the run instead of waiting longer.
+- The gate's wiring checks are greps and `--syntax-check` runs, and it runs the
+  role fixtures; the applied paths (subordinate IDs, linger, socket, Quadlet
+  generation) are proven by the sandbox converge, not by the gate.
+- `--check` cannot report an identifier change (`usermod`, `loginctl`): only a
+  real converge proves it, and a real converge is the only proof of idempotence.
 
 ## Project status
 
@@ -305,7 +386,7 @@ refuses an unsupported host edition; `0.1.0` was the first release. Debian is
 the only supported base; a newer Debian release is added when the Server
 collection declares it. The product is maintained by one author; there is no
 support contract, service level or warranty, express or implied (see
-[`CONTRIBUTING.md`](CONTRIBUTING.md) and [`SECURITY.md`](SECURITY.md)).
+[`CONTRIBUTING.md`](https://github.com/benmoussa-younes/container/blob/main/CONTRIBUTING.md) and [`SECURITY.md`](https://github.com/benmoussa-younes/container/blob/main/SECURITY.md)).
 
 ## Forking
 
@@ -315,10 +396,10 @@ support beyond the licence.
 
 ## Support
 
-- A defect or a question: open an issue on
-  [GitHub](https://github.com/benmoussa-younes/container/issues).
-- A security report: **not** a public issue — follow [`SECURITY.md`](SECURITY.md).
-- The gate and the release process are described in [`AGENTS.md`](AGENTS.md).
+- A defect or a question: the repository's Issues are disabled; write to the
+  address in [`SECURITY.md`](https://github.com/benmoussa-younes/container/blob/main/SECURITY.md).
+- A security report: **not** a public issue — follow [`SECURITY.md`](https://github.com/benmoussa-younes/container/blob/main/SECURITY.md).
+- The gate and the release process are described in [`AGENTS.md`](https://github.com/benmoussa-younes/container/blob/main/AGENTS.md).
 
 ## Licence
 
@@ -330,6 +411,6 @@ the map. The base image's Debian packages keep their own licences.
 
 External contributions are not accepted at this time; unsolicited pull requests
 or patches may be closed without review. No support, service level or warranty
-is provided beyond the licences. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for
+is provided beyond the licences. See [`CONTRIBUTING.md`](https://github.com/benmoussa-younes/container/blob/main/CONTRIBUTING.md) for
 the maintainer workflow and the private vulnerability report in
-[`SECURITY.md`](SECURITY.md).
+[`SECURITY.md`](https://github.com/benmoussa-younes/container/blob/main/SECURITY.md).
