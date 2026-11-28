@@ -10,8 +10,8 @@ declarations run on. The product owns the engine, the generator's input and the
 base; the definitions themselves — ports, volumes, networks, secrets — remain
 the site's.
 
-It installs on a host that already carries an edition — Server Edition or
-Workstation Edition — and it **writes no host identity**: no `os-release` of
+It installs on a host that already carries an edition — Server Edition today;
+a Workstation Edition host is refused — and it **writes no host identity**: no `os-release` of
 its own, no login banner, no boot splash, no version line of its own. The one
 account it creates is the engine's own, and the site declares its name, UID and
 GID. The edition says what the machine is; this collection says what it runs.
@@ -34,9 +34,10 @@ It is shipped as the collection `benmoussa.container`.
   `uid_map` and `gid_map` back. A host that delegates subordinate IDs to an NSS
   provider is refused, because the role reads the files.
 - **The engine's defaults, decided**: Debian leaves `no_new_privileges` off,
-  the log size unbounded and the pids limit at 1024. The product turns the
-  first on, bounds the other two, sets `umask` 0077 and names the `crun`
-  runtime.
+  the pids limit at 1024. The product turns the first on, bounds the pids,
+  sets `umask` 0077 and names the `crun` runtime. Container logs go to
+  journald, whose retention belongs to the host journal: `log_size_max` only
+  bounds the file driver, which the product's units do not use.
 - **One writer per file**: the engine writes `99-container-podman.conf` and
   removes the `99-podman.conf` the retired edition roles left under the same
   directories, so the lexical order of `99-*.conf` can no longer make an old
@@ -63,8 +64,8 @@ It is shipped as the collection `benmoussa.container`.
 
 ## Requirements
 
-- a target running **Debian 13** (`trixie`), the release both editions support
-  today, with the engine packages taken from the distribution;
+- a target running **Debian 13** (`trixie`), the release the supported edition
+  runs today, with the engine packages taken from the distribution;
 - `ansible-core` **2.19 or later** on the controller, with SSH access to the
   target;
 - no pre-existing account: the collection creates the engine's own login
@@ -205,8 +206,8 @@ root, no setuid bit and no package list. It writes nothing outside a tmpfs,
 which is what makes the read-only defaults of the Quadlet role usable.
 
 ```sh
-podman build -t localhost/benmoussa/container:0.1.0 images/base
-podman run --rm localhost/benmoussa/container:0.1.0 sh -c 'id; cat /etc/os-release'
+podman build -t localhost/benmoussa/container:test images/base
+podman run --rm localhost/benmoussa/container:test sh -c 'id; cat /etc/os-release'
 ```
 
 The image is not built by the roles: the product ships the `Containerfile`, the
@@ -297,6 +298,20 @@ defaults are on. Empty it deliberately if a site needs one.
 - It does not store a secret, a registry credential or a site definition.
 - It does not manage a firewall port for a unit: the site that publishes a port
   declares it.
+- It does not write an image policy: no `policy.json` is shipped and a declared
+  `Image=` is not required to carry a digest. Short-name resolution is the
+  engine's configuration, and `AutoUpdate=registry` needs the
+  `podman-auto-update.timer`, which the site owns.
+- It does not put a secret in a unit: `quadlet_units` is written `0644` and is
+  not scanned for credentials; keep a credential in the site's vault and hand it
+  to the container through the unit's own mechanism.
+- It waits up to 30 s for `/run/user/<uid>` after enabling linger; a slower host
+  fails the run instead of waiting longer.
+- The gate's wiring checks are greps and `--check` runs; the applied paths
+  (subordinate IDs, linger, socket, Quadlet generation) are proven by the
+  sandbox converge, not by the gate.
+- `--check` cannot report an identifier change (`usermod`, `loginctl`): only a
+  real converge proves it, and a real converge is the only proof of idempotence.
 
 ## Project status
 
@@ -305,7 +320,7 @@ refuses an unsupported host edition; `0.1.0` was the first release. Debian is
 the only supported base; a newer Debian release is added when the Server
 collection declares it. The product is maintained by one author; there is no
 support contract, service level or warranty, express or implied (see
-[`CONTRIBUTING.md`](CONTRIBUTING.md) and [`SECURITY.md`](SECURITY.md)).
+[`CONTRIBUTING.md`](https://github.com/benmoussa-younes/container/blob/main/CONTRIBUTING.md) and [`SECURITY.md`](https://github.com/benmoussa-younes/container/blob/main/SECURITY.md)).
 
 ## Forking
 
@@ -315,10 +330,10 @@ support beyond the licence.
 
 ## Support
 
-- A defect or a question: open an issue on
-  [GitHub](https://github.com/benmoussa-younes/container/issues).
-- A security report: **not** a public issue — follow [`SECURITY.md`](SECURITY.md).
-- The gate and the release process are described in [`AGENTS.md`](AGENTS.md).
+- A defect or a question: the repository's Issues are disabled; write to the
+  address in [`SECURITY.md`](https://github.com/benmoussa-younes/container/blob/main/SECURITY.md).
+- A security report: **not** a public issue — follow [`SECURITY.md`](https://github.com/benmoussa-younes/container/blob/main/SECURITY.md).
+- The gate and the release process are described in [`AGENTS.md`](https://github.com/benmoussa-younes/container/blob/main/AGENTS.md).
 
 ## Licence
 
@@ -330,6 +345,6 @@ the map. The base image's Debian packages keep their own licences.
 
 External contributions are not accepted at this time; unsolicited pull requests
 or patches may be closed without review. No support, service level or warranty
-is provided beyond the licences. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for
+is provided beyond the licences. See [`CONTRIBUTING.md`](https://github.com/benmoussa-younes/container/blob/main/CONTRIBUTING.md) for
 the maintainer workflow and the private vulnerability report in
-[`SECURITY.md`](SECURITY.md).
+[`SECURITY.md`](https://github.com/benmoussa-younes/container/blob/main/SECURITY.md).

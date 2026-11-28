@@ -19,9 +19,13 @@ warranty, as stated in [`LICENSE`](LICENSE) and `LICENSES/`.
 
 ## Reporting a vulnerability
 
-Do not open a public issue. Report it privately to:
+Do not open a public issue. Report it privately through GitHub's private
+vulnerability reporting (Security -> Report a vulnerability) or by email to:
 
 **younes.benmoussa@pm.me**
+
+There is no published encryption key for the security contact: use the private
+GitHub report when the material must stay encrypted in transit.
 
 Include:
 
@@ -41,6 +45,8 @@ In scope:
 
 - the roles in `roles/`, the playbook, the collection archive and the
   repository tooling;
+- the base image (`images/base/Containerfile`) and its pinned digest;
+- the two GitHub workflows (`.github/workflows/ci.yml` and `release.yml`);
 - the engine configuration the role writes: registry search path, engine
   drop-in, user socket, linger and subordinate IDs;
 - a defect that makes a correct machine fail or a converge unsafe.

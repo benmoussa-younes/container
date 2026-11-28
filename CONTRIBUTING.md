@@ -40,20 +40,36 @@ for complying with the licences when you redistribute or modify the code.
    customer name. The example inventory carries documentation values only.
 4. **A second run that changes nothing.** Idempotence is a gate, not a goal.
 
+## Lint configuration
+
+The four `tests/sanity/ignore-2.*.txt` files are identical on purpose: every
+`tools/**/*.scs` carries a shebang `ansible-test` does not know, and the same
+lines apply to each supported `ansible-core` version. The gate checks that each
+file names every script.
+
+`.ansible-lint` skips `name[template]` because role task names intentionally
+carry the loop variable, warns `var-naming[no-role-prefix]` because the
+collection's variables are prefixed by role (`podman_`, `quadlet_`, `account_`)
+rather than by the rule's expected pattern, and `.yamllint` disables
+`comments-indentation` for the legacy comment blocks (the code is being purged
+of comments, after which the rule can return).
+
 ## The gate
 
 Run from the repository root; a change is not done until it passes:
 
 ```sh
-ansible-lint playbooks roles
-yamllint -c .yamllint roles playbooks inventories
-reuse lint
-scripts check tools/scripts/binaries/gate.scs
-scripts run tools/scripts/binaries/gate.scs
+for script in tools/scripts/binaries/*.scs; do scripts check --deny-warnings "$script"; done
+for module in tools/scripts/modules/*.scs; do scripts check --module --deny-warnings "$module"; done
+scripts run --no-warnings tools/scripts/binaries/gate.scs
 ```
 
-The gate also builds the collection and inspects the archive, so a file that
-should not ship fails before the tag.
+The gate is the single entry point: it runs `ansible-lint`, `yamllint`,
+`reuse lint`, the syntax check, the secret scan, the archive and the proofs.
+The two loops check the Scripts interpreter itself, which the gate does not
+re-enter. `requirements-dev.txt` pins the Python tools (the CI installs them;
+`ansible-core` follows the matrix), and the Scripts release is pinned by URL and
+SHA in the workflows.
 
 A change that touches the engine, the socket or the subordinate IDs is **not**
 proven by `--check`. Say what was measured, on which machine.

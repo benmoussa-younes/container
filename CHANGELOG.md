@@ -108,9 +108,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PRETTY_NAME`, a version of its own or `/etc/container-edition`: the
   collection is a capability and owns no identity, in an image or on a host.
 - The collection version is `0.2.0`. The invariants a `0.3.0` would carry —
-  images pinned by digest, `storage.conf.d`, the auto-update timer, a service
-  account, no TCP socket — are not implemented yet, so this release does not
-  claim them.
+  images pinned by digest, a read-back of the storage driver (Podman 5.4.2 has
+  no `storage.conf.d`), the auto-update timer, a service account, no TCP
+  socket — are not implemented yet, so this release does not claim them.
 
 ### Fixed
 
@@ -153,7 +153,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verified against its release `SHA256SUMS`), one non-root account, a locked
   root, no setuid bit and a branded `/etc/os-release`.
 - The engine's defaults in `containers.conf`: `no_new_privileges` on, the pids
-  limit and the log size bounded, `umask` 0077 and the `crun` runtime — Debian
+  limit bounded, `umask` 0077 and the `crun` runtime — Debian
   leaves all of them permissive.
 - The Quadlet role writes the product's global hardening drop-in
   (`NoNewPrivileges`, all capabilities dropped, read-only rootfs, `RunInit`,
@@ -170,7 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The configuration drop-ins are named `99-container-podman.conf`, so the
   collection does not collide with a site's own Podman configuration.
 
-[Unreleased]: https://github.com/benmoussa-younes/container/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/benmoussa-younes/container/compare/v0.2.0...HEAD
 [0.3.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.3.0
 [0.2.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.2.0
 [0.1.0]: https://github.com/benmoussa-younes/container/releases/tag/v0.1.0

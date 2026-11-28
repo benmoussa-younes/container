@@ -9,13 +9,15 @@ secret remain the site's. It is a capability, not an edition: it reads
 ## Build and test
 
 ```sh
-ansible-lint playbooks roles
-yamllint -c .yamllint roles playbooks inventories
-reuse lint
-scripts check --deny-warnings tools/scripts/binaries/gate.scs
-scripts check --module --deny-warnings tools/scripts/modules/*.scs
+for script in tools/scripts/binaries/*.scs; do scripts check --deny-warnings "$script"; done
+for module in tools/scripts/modules/*.scs; do scripts check --module --deny-warnings "$module"; done
 scripts run --no-warnings tools/scripts/binaries/gate.scs  # one VERDICT line, exit 0/1
 ```
+
+The gate runs `ansible-lint`, `yamllint`, `reuse lint`, the syntax check, the
+archive, the secret scan and the proofs; the two loops check the interpreter
+itself. `requirements-dev.txt` pins the Python tools; the Scripts release is
+pinned by URL and SHA in the workflows.
 
 The sandbox converge runs on this host as root, with the become password file
 the owner keeps; it creates the sandbox account, and the teardown is the
@@ -32,7 +34,7 @@ playbooks' syntax. It does not change tracked files.
 The base image is not built by the gate:
 
 ```sh
-podman build -t localhost/benmoussa/container:0.1.0 images/base
+podman build -t localhost/benmoussa/container:test images/base
 ```
 
 ## Conventions
