@@ -48,6 +48,7 @@ collection `benmoussa.container`.
 - **A refusal, not a warning**: a declared unit that carries `Network=host`,
   `User=0`, `NoNewPrivileges=false`, `ReadOnly=false` or
   `SecurityLabelDisable=true` fails the run while the hardened defaults are on.
+  The match ignores the spacing around `=`, so `Network = host` is refused too.
 - **A base image**: the Debian minimal base pinned by digest, TLS roots,
   `tzdata`, `curl`, `procps` and the Scripts interpreter, one non-root
   account, a locked root and no setuid bit. The image keeps Debian's own
@@ -162,8 +163,8 @@ touches another account's line. `podman_subid_nsswitch_file` is read too: a host
 
 `--check` does not report the identifiers: `usermod` and `podman system migrate`
 are commands, so a dry run prints `changed=0` even when a real run would rewrite
-the two files. Run the play once to converge them, or read the plan with
-`--diff`.
+the two files. Run the play once to converge them; the answer the plan returned
+is in the failure message when it refuses.
 
 ### Default bounds
 
@@ -224,7 +225,15 @@ generator directory (`~/.config/containers/systemd/`):
 
 The role does not trust that table: after the reload it reads every declared
 unit back with `systemctl --user cat <unit>`, so a declaration the generator
-ignored fails the run. `state: absent` removes the file and reloads the manager.
+ignored fails the run. `state: absent` removes the file, the two bound drop-ins
+the product wrote beside it, and reloads the manager.
+
+A `container` or `kube` unit must carry `[Install]` with `WantedBy=` or
+`RequiredBy=`: Quadlet applies that section at generation and starts nothing at
+boot without it, so a unit the product accepted would never come back after a
+reboot. A unit another one starts declares `boot: false` instead. Two
+declarations may not share a name and a type, and `quadlet_hardened_defaults:
+false` removes the drop-in instead of leaving it behind.
 
 A unit file is a string in the inventory. A site that needs a secret keeps it in
 its own vault and passes it as a `Secret=` entry of its unit; the product stores

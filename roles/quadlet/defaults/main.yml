@@ -20,6 +20,13 @@ quadlet_user: "{{ podman_user | default('') }}"
 #   state:   present | absent (default present)
 #   content: the unit file as a string, required when the state is present
 #   mode:    the file mode (default 0644)
+#   boot:    a container or kube unit must carry `[Install]` with `WantedBy=` or
+#            `RequiredBy=`, because Quadlet applies that section at generation and
+#            starts nothing at boot without it. `boot: false` is the explicit
+#            opt-out for a unit another unit starts.
+#
+# Two declarations may not share a name and a type: the second would overwrite
+# the first file silently.
 quadlet_units: []
 
 # The account's home is read from the passwd record at role start (see the
@@ -31,6 +38,8 @@ quadlet_home: ""
 quadlet_directory: "{{ quadlet_home }}/.config/containers/systemd"
 
 # The user manager is reloaded after a change, so the generated units exist.
+# `quadlet_verify` reads every generated unit back through that manager, so it
+# requires this: the role refuses the pair `verify: true` with `reload: false`.
 quadlet_reload: true
 
 # The bounds every container unit gets unless it declares its own. Empty means

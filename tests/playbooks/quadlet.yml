@@ -1,0 +1,389 @@
+---
+# Proves the `quadlet` role's decisions without root.
+#
+# The role writes into a directory the owning account owns, so the play runs as
+# the current account with `quadlet_verify: false` (no user manager) and
+# `quadlet_reload: false` (no `systemctl --user daemon-reload`). Every case that
+# must be refused catches the failure and reads the message that carried it: a
+# `fail` inside the block would be caught by the same `rescue` and prove nothing.
+- name: Declared keys are matched whatever the spacing around the equal sign
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars: &sandbox
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_directory: /tmp/opencode/quadlet-proof/spacing
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_hardened_defaults: true
+    quadlet_units:
+      - name: relaxed
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+          Network = host
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The unit with a spaced forbidden key fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a forbidden key written as `Network = host` was accepted"
+      rescue:
+        # A looped `assert` reports "One or more items failed" and carries the
+        # real reason in each item's `msg`, so both shapes are read.
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the forbidden key, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'Network=host' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A container unit without a boot contract is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    <<: *sandbox
+    quadlet_directory: /tmp/opencode/quadlet-proof/no-install
+    quadlet_units:
+      - name: noboot
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+  tasks:
+    - name: The unit without [Install] fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a container unit without `[Install]` was accepted"
+      rescue:
+        # A looped `assert` reports "One or more items failed" and carries the
+        # real reason in each item's `msg`, so both shapes are read.
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the boot contract, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'WantedBy' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A unit that opts out of the boot contract is accepted
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    <<: *sandbox
+    quadlet_directory: /tmp/opencode/quadlet-proof/boot-false
+    quadlet_units:
+      - name: manual
+        type: container
+        boot: false
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+  tasks:
+    - name: The declarations are applied
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+
+    - name: The opt-out unit is written
+      ansible.builtin.stat:
+        path: /tmp/opencode/quadlet-proof/boot-false/manual.container
+      register: quadlet_written
+
+    - name: The unit exists
+      ansible.builtin.assert:
+        that:
+          - quadlet_written.stat.exists
+
+- name: Two declarations of one name and type are refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    <<: *sandbox
+    quadlet_directory: /tmp/opencode/quadlet-proof/duplicate
+    quadlet_units:
+      - name: twice
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+
+          [Install]
+          WantedBy=default.target
+      - name: twice
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.19
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The duplicate fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: two declarations wrote the same file"
+      rescue:
+        # A looped `assert` reports "One or more items failed" and carries the
+        # real reason in each item's `msg`, so both shapes are read.
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the duplicate, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'twice' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A unit that declares its own bound keeps it, whatever the spacing
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    <<: *sandbox
+    quadlet_directory: /tmp/opencode/quadlet-proof/bound
+    quadlet_default_memory: 256M
+    quadlet_units:
+      - name: memory
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+
+          [Service]
+          MemoryMax = 1G
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The declarations are applied
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+
+    - name: The product's default drop-in is not written over the site's value
+      ansible.builtin.stat:
+        path: /tmp/opencode/quadlet-proof/bound/memory.container.d/50-default-memory.conf
+      register: quadlet_bound
+
+    - name: The site's value stays the only one
+      ansible.builtin.assert:
+        that:
+          - not quadlet_bound.stat.exists
+
+- name: Withdrawing the hardening removes the product's drop-in
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    <<: *sandbox
+    quadlet_directory: /tmp/opencode/quadlet-proof/withdraw-hardening
+    quadlet_hardened_defaults: true
+    quadlet_units: []
+  tasks:
+    - name: The hardening is declared
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+
+    - name: The hardening drop-in exists
+      ansible.builtin.stat:
+        path: /tmp/opencode/quadlet-proof/withdraw-hardening/container.d/10-container-edition.conf
+      register: quadlet_hardening_written
+
+    - name: The first run wrote the hardening drop-in
+      ansible.builtin.assert:
+        that:
+          - quadlet_hardening_written.stat.exists
+
+    - name: The hardening is withdrawn
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+      vars:
+        quadlet_hardened_defaults: false
+
+    - name: The withdrawn hardening drop-in is gone
+      ansible.builtin.stat:
+        path: /tmp/opencode/quadlet-proof/withdraw-hardening/container.d/10-container-edition.conf
+      register: quadlet_hardening_removed
+
+    - name: Nothing of the product is left behind
+      ansible.builtin.assert:
+        that:
+          - not quadlet_hardening_removed.stat.exists
+
+- name: Withdrawing a unit removes the product's drop-ins with it
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    <<: *sandbox
+    quadlet_directory: /tmp/opencode/quadlet-proof/withdraw-unit
+    quadlet_default_memory: 256M
+    quadlet_units:
+      - name: bounded
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The unit is declared
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+
+    - name: The product's bound was written
+      ansible.builtin.stat:
+        path: /tmp/opencode/quadlet-proof/withdraw-unit/bounded.container.d/50-default-memory.conf
+      register: quadlet_unit_bound
+
+    - name: The first run wrote the bound
+      ansible.builtin.assert:
+        that:
+          - quadlet_unit_bound.stat.exists
+
+    - name: The unit is withdrawn
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+      vars:
+        quadlet_units:
+          - name: bounded
+            type: container
+            state: absent
+
+    - name: The unit file is gone
+      ansible.builtin.stat:
+        path: /tmp/opencode/quadlet-proof/withdraw-unit/bounded.container
+      register: quadlet_unit_gone
+
+    - name: The bound the product owned is gone
+      ansible.builtin.stat:
+        path: /tmp/opencode/quadlet-proof/withdraw-unit/bounded.container.d/50-default-memory.conf
+      register: quadlet_unit_bound_gone
+
+    - name: Nothing the product owned for that unit is left behind
+      ansible.builtin.assert:
+        that:
+          - not quadlet_unit_gone.stat.exists
+          - not quadlet_unit_bound_gone.stat.exists
+
+- name: Reading units back without reloading the manager is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    <<: *sandbox
+    quadlet_directory: /tmp/opencode/quadlet-proof/verify-without-reload
+    quadlet_verify: true
+    quadlet_reload: false
+  tasks:
+    - name: The read-back without a reload fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: quadlet_verify was accepted with quadlet_reload false"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the pair, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'quadlet_reload' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+# The podman role's own coherence rule, proven without root: the read-back is
+# decided before any package, account or file is touched.
+- name: A read-back without the account's user manager is refused
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    container_host_edition: server
+    podman_enabled: true
+    podman_user: "{{ lookup('env', 'USER') }}"
+    podman_linger: false
+    podman_verify: true
+  tasks:
+    - name: The read-back without linger fails the run
+      block:
+        - name: The engine is configured
+          ansible.builtin.include_role:
+            name: podman
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: podman_verify was accepted with podman_linger false"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            podman_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the pair, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in podman_refusal"
+          - "'podman_linger' in podman_refusal"
+        fail_msg: "{{ podman_refusal | default('the include did not fail') }}"

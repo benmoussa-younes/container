@@ -418,6 +418,7 @@ function check_required(root: path) -> list<string> {
         "roles/quadlet/meta/argument_specs.yml",
         "inventories/example/hosts.yml",
         "tests/playbooks/subid.yml",
+        "tests/playbooks/quadlet.yml",
         "tests/playbooks/verify-sandbox.yml",
         "tests/inventories/sandbox/hosts.yml",
         "tools/scripts/binaries/gate.scs",
@@ -696,6 +697,11 @@ for playbook in ["playbooks/site.yml", "tests/playbooks/subid.yml", "tests/playb
 # The plan is proven, not grepped: the fixtures run the role's own tasks and the
 # two answers that must be refused are refused.
 for problem in execute(root, process.request("ansible-playbook", ["-i", "localhost,", "-c", "local", "tests/playbooks/subid.yml"]), "subid plan proof") {
+    failures.append(problem)
+}
+# The Quadlet decisions are proven the same way: no root, no Podman, only the
+# role's own tasks and the files it writes.
+for problem in execute(root, process.request("ansible-playbook", ["-i", "localhost,", "-c", "local", "tests/playbooks/quadlet.yml"]), "quadlet decision proof") {
     failures.append(problem)
 }
 for problem in check_archive(root) {
