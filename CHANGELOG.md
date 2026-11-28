@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the run), reads the account back, and checks that the home belongs to it.
   `playbooks/site.yml` runs it first, when the engine or the declarations are
   enabled.
+- `quadlet`: a declared unit and the drop-ins the role writes for it are
+  `0600`, not `0644`: the text belongs to the account, and a credential left in
+  it is readable by that account only.
+- `quadlet`: the boot contract reads the `[Install]` section itself: a
+  `WantedBy=`/`RequiredBy=`/`DefaultInstance=` written in another section no
+  longer satisfies it.
 - `quadlet`: a declaration carries `dropins`, a list of `{name, content}` files
   written into `<name>.<type>.d/`. The role refuses a name that does not end in
   `.conf`, a name the product owns, a duplicate and a drop-in on an absent unit,
@@ -41,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `podman`: the README states what the enabled user socket grants (the
+  account's engine rights) and that rootless Podman on Debian applies no
+  AppArmor or SELinux layer (`podman info`: `apparmorEnabled=false`,
+  `selinuxEnabled=false`); seccomp is the confinement.
 - `podman`: the Debian 13 / systemd / cgroup v2 guard sits inside the
   `podman_enabled` block: a disabled role now only removes its own drop-in, and
   the argument spec resolves before the account is read (`podman_home` has an

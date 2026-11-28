@@ -342,6 +342,35 @@ function check_registries_owner(root: path) -> list<string> {
     return result
 }
 
+# The base image is built by the site, not here (a container build in CI is a
+# deliberate no-go), so the gate reads what can be read without a builder: the
+# digest the base is pinned to, the labels that name the product and the
+# licence, and the root state. A stale `version` label is what D42 found.
+function check_base_image(root: path) -> list<string> {
+    let image = read_text(root, "images/base/Containerfile")
+    let readme = read_text(root, "README.md")
+    let mutable result: list<string> = []
+    for problem in note(image.contains("@sha256:"), "base digest pinned", "images/base/Containerfile: FROM is not pinned by digest") {
+        result.append(problem)
+    }
+    for problem in note(image.contains("org.opencontainers.image.source=\"https://github.com/benmoussa-younes/container\""), "base source label", "images/base/Containerfile: the source label is missing") {
+        result.append(problem)
+    }
+    for problem in note(image.contains("org.opencontainers.image.licenses=\"AGPL-3.0-or-later\""), "base licence label", "images/base/Containerfile: the licence label is missing") {
+        result.append(problem)
+    }
+    for problem in note(image.contains("org.opencontainers.image.version=\"$\{VERSION\}\""), "base version from the build", "images/base/Containerfile: the version label is hardcoded") {
+        result.append(problem)
+    }
+    for problem in note(image.contains("passwd -l root"), "base root locked", "images/base/Containerfile: root is not locked") {
+        result.append(problem)
+    }
+    for problem in note(readme.contains("--build-arg VERSION"), "base build command passes the version", "README.md: the documented build does not pass VERSION") {
+        result.append(problem)
+    }
+    return result
+}
+
 # The subordinate ID planner decides what `/etc/subuid` and `/etc/subgid` must
 # say. It is the one piece of the engine the role must get right before it
 # writes: an overlapping range is a corruption vector, and a range the account
@@ -822,6 +851,9 @@ for problem in check_documented_versions(root) {
     failures.append(problem)
 }
 for problem in check_registries_owner(root) {
+    failures.append(problem)
+}
+for problem in check_base_image(root) {
     failures.append(problem)
 }
 for problem in check_subid_plan(root) {

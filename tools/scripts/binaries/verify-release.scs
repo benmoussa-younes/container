@@ -122,6 +122,27 @@ if filesystem.path_exists(directory / "SHA256SUMS") {
     }
 }
 
+# The maintainer signs `SHA256SUMS` after the workflow built and uploaded it,
+# because only they hold the key and only they can sign the bytes CI produced.
+# A local verification checks the signature when it is there; CI has no key and
+# says so instead of passing silently.
+if filesystem.path_exists(directory / "SHA256SUMS.asc") {
+    match process.run(process.request("gpg", ["--verify", "SHA256SUMS.asc", "SHA256SUMS"]).with_working_directory(directory)) {
+        ok(completed) => {
+            for problem in note(completed.exit_code == 0, "checksum signature", completed.standard_error.trim_whitespace()) {
+                failures.append(problem)
+            }
+        }
+        error(failure) => {
+            for problem in note(false, "checksum signature", "cannot run gpg: {failure.kind}") {
+                failures.append(problem)
+            }
+        }
+    }
+} else {
+    io.write_standard_output_line("SKIP checksum signature (the maintainer signs the published SHA256SUMS)")
+}
+
 if filesystem.path_exists(directory / "SHA256SUMS") {
     let names = checksum_names(read_text(directory, "SHA256SUMS"))
     let expected = [collection_name, source_name]

@@ -10,12 +10,23 @@
   hosts: localhost
   connection: local
   gather_facts: false
+
+  pre_tasks:
+    - name: The proof root is unique to this run
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: quadlet-proof.
+      register: quadlet_proof_root
+
+    - name: Every play writes under this run's root
+      ansible.builtin.set_fact:
+        quadlet_proof: "{{ quadlet_proof_root.path }}"
   vars:
     quadlet_enabled: true
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/spacing
+    quadlet_directory: "{{ quadlet_proof }}/spacing"
     quadlet_hardened_defaults: true
     quadlet_units:
       - name: relaxed
@@ -64,7 +75,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/no-install
+    quadlet_directory: "{{ quadlet_proof }}/no-install"
     quadlet_units:
       - name: noboot
         type: container
@@ -108,7 +119,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/boot-false
+    quadlet_directory: "{{ quadlet_proof }}/boot-false"
     quadlet_units:
       - name: manual
         type: container
@@ -124,7 +135,7 @@
 
     - name: The opt-out unit is written
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/boot-false/manual.container
+        path: "{{ quadlet_proof }}/boot-false/manual.container"
       register: quadlet_written
 
     - name: The unit exists
@@ -141,7 +152,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/duplicate
+    quadlet_directory: "{{ quadlet_proof }}/duplicate"
     quadlet_units:
       - name: twice
         type: container
@@ -196,7 +207,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/bound
+    quadlet_directory: "{{ quadlet_proof }}/bound"
     quadlet_default_memory: 256M
     quadlet_units:
       - name: memory
@@ -218,7 +229,7 @@
 
     - name: The product's default drop-in is not written over the site's value
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/bound/memory.container.d/50-default-memory.conf
+        path: "{{ quadlet_proof }}/bound/memory.container.d/50-default-memory.conf"
       register: quadlet_bound
 
     - name: The site's value stays the only one
@@ -235,7 +246,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/withdraw-hardening
+    quadlet_directory: "{{ quadlet_proof }}/withdraw-hardening"
     quadlet_hardened_defaults: true
     quadlet_units: []
   tasks:
@@ -246,7 +257,7 @@
 
     - name: The hardening drop-in exists
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/withdraw-hardening/container.d/10-container-edition.conf
+        path: "{{ quadlet_proof }}/withdraw-hardening/container.d/10-container-edition.conf"
       register: quadlet_hardening_written
 
     - name: The first run wrote the hardening drop-in
@@ -263,7 +274,7 @@
 
     - name: The withdrawn hardening drop-in is gone
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/withdraw-hardening/container.d/10-container-edition.conf
+        path: "{{ quadlet_proof }}/withdraw-hardening/container.d/10-container-edition.conf"
       register: quadlet_hardening_removed
 
     - name: Nothing of the product is left behind
@@ -280,7 +291,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/withdraw-unit
+    quadlet_directory: "{{ quadlet_proof }}/withdraw-unit"
     quadlet_default_memory: 256M
     quadlet_units:
       - name: bounded
@@ -299,7 +310,7 @@
 
     - name: The product's bound was written
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/withdraw-unit/bounded.container.d/50-default-memory.conf
+        path: "{{ quadlet_proof }}/withdraw-unit/bounded.container.d/50-default-memory.conf"
       register: quadlet_unit_bound
 
     - name: The first run wrote the bound
@@ -319,12 +330,12 @@
 
     - name: The unit file is gone
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/withdraw-unit/bounded.container
+        path: "{{ quadlet_proof }}/withdraw-unit/bounded.container"
       register: quadlet_unit_gone
 
     - name: The bound the product owned is gone
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/withdraw-unit/bounded.container.d/50-default-memory.conf
+        path: "{{ quadlet_proof }}/withdraw-unit/bounded.container.d/50-default-memory.conf"
       register: quadlet_unit_bound_gone
 
     - name: Nothing the product owned for that unit is left behind
@@ -342,7 +353,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: true
-    quadlet_directory: /tmp/opencode/quadlet-proof/verify-without-reload
+    quadlet_directory: "{{ quadlet_proof }}/verify-without-reload"
   tasks:
     - name: The read-back without a reload fails the run
       block:
@@ -416,7 +427,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/port-floor
+    quadlet_directory: "{{ quadlet_proof }}/port-floor"
     quadlet_hardened_defaults: true
     quadlet_unprivileged_port_start: 1024
     quadlet_units:
@@ -465,7 +476,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/port-template
+    quadlet_directory: "{{ quadlet_proof }}/port-template"
     quadlet_hardened_defaults: true
     quadlet_unprivileged_port_start: 1024
     quadlet_units:
@@ -518,7 +529,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/spaced-port
+    quadlet_directory: "{{ quadlet_proof }}/spaced-port"
     quadlet_hardened_defaults: true
     quadlet_unprivileged_port_start: 1024
     quadlet_units:
@@ -566,7 +577,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/port-range
+    quadlet_directory: "{{ quadlet_proof }}/port-range"
     quadlet_hardened_defaults: true
     quadlet_unprivileged_port_start: 1024
     quadlet_units:
@@ -614,7 +625,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/kernel-floor
+    quadlet_directory: "{{ quadlet_proof }}/kernel-floor"
     quadlet_hardened_defaults: true
     quadlet_unprivileged_port_start: ""
     quadlet_units:
@@ -671,7 +682,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/template-default-instance
+    quadlet_directory: "{{ quadlet_proof }}/template-default-instance"
     quadlet_hardened_defaults: true
     quadlet_units:
       - name: "tpl@"
@@ -717,7 +728,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/podman-args
+    quadlet_directory: "{{ quadlet_proof }}/podman-args"
     quadlet_hardened_defaults: true
     quadlet_units:
       - name: privilegedpod
@@ -761,7 +772,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/unmask
+    quadlet_directory: "{{ quadlet_proof }}/unmask"
     quadlet_hardened_defaults: true
     quadlet_units:
       - name: unmasked
@@ -808,7 +819,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/port-floor-typo
+    quadlet_directory: "{{ quadlet_proof }}/port-floor-typo"
     quadlet_hardened_defaults: true
     quadlet_unprivileged_port_start: "word"
     quadlet_units:
@@ -856,7 +867,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/dropins
+    quadlet_directory: "{{ quadlet_proof }}/dropins"
     quadlet_hardened_defaults: true
     quadlet_units:
       - name: tuned
@@ -884,7 +895,7 @@
 
     - name: The declared drop-ins exist
       ansible.builtin.stat:
-        path: "/tmp/opencode/quadlet-proof/dropins/tuned.container.d/{{ item }}"
+        path: "{{ quadlet_proof }}/dropins/tuned.container.d/{{ item }}"
       loop:
         - 50-network.conf
         - 60-nofile.conf
@@ -892,7 +903,7 @@
 
     - name: The state file lists the drop-ins the role wrote
       ansible.builtin.slurp:
-        src: /tmp/opencode/quadlet-proof/dropins/tuned.container.d/.ansible-managed.json
+        src: "{{ quadlet_proof }}/dropins/tuned.container.d/.ansible-managed.json"
       register: quadlet_dropins_state
 
     - name: Every declared drop-in is on disk and in the state file
@@ -924,13 +935,28 @@
 
     - name: The dropped drop-in is gone
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/dropins/tuned.container.d/50-network.conf
+        path: "{{ quadlet_proof }}/dropins/tuned.container.d/50-network.conf"
       register: quadlet_dropin_dropped
 
     - name: The remaining drop-in stays
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/dropins/tuned.container.d/60-nofile.conf
+        path: "{{ quadlet_proof }}/dropins/tuned.container.d/60-nofile.conf"
       register: quadlet_dropin_kept
+
+    - name: The unit and its drop-ins are private to the account
+      ansible.builtin.stat:
+        path: "{{ quadlet_proof }}/dropins/{{ item }}"
+      loop:
+        - tuned.container
+        - tuned.container.d/60-nofile.conf
+        - tuned.container.d/.ansible-managed.json
+      register: quadlet_private
+
+    - name: The unit text is written 0600
+      ansible.builtin.assert:
+        that:
+          - quadlet_private.results | map(attribute='stat.mode') | list == ['0600', '0600', '0600']
+        fail_msg: "{{ quadlet_private.results | map(attribute='stat.mode') | list }}"
 
     - name: Only the withdrawn drop-in was removed
       ansible.builtin.assert:
@@ -955,7 +981,7 @@
 
     - name: The last drop-in and the state file are gone
       ansible.builtin.stat:
-        path: "/tmp/opencode/quadlet-proof/dropins/tuned.container.d/{{ item }}"
+        path: "{{ quadlet_proof }}/dropins/tuned.container.d/{{ item }}"
       loop:
         - 60-nofile.conf
         - .ansible-managed.json
@@ -975,7 +1001,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/withdraw-dropins
+    quadlet_directory: "{{ quadlet_proof }}/withdraw-dropins"
     quadlet_units:
       - name: gone
         type: container
@@ -998,7 +1024,7 @@
 
     - name: The managed drop-in was written
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/withdraw-dropins/gone.container.d/50-tuning.conf
+        path: "{{ quadlet_proof }}/withdraw-dropins/gone.container.d/50-tuning.conf"
       register: quadlet_unit_dropin
 
     - name: The first run wrote the drop-in
@@ -1018,7 +1044,7 @@
 
     - name: The drop-in the role wrote is gone with the unit
       ansible.builtin.stat:
-        path: "/tmp/opencode/quadlet-proof/withdraw-dropins/gone.container.d/{{ item }}"
+        path: "{{ quadlet_proof }}/withdraw-dropins/gone.container.d/{{ item }}"
       loop:
         - 50-tuning.conf
         - .ansible-managed.json
@@ -1038,7 +1064,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/bad-dropins
+    quadlet_directory: "{{ quadlet_proof }}/bad-dropins"
     quadlet_units:
       - name: badname
         type: container
@@ -1207,7 +1233,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/dropin-bypass
+    quadlet_directory: "{{ quadlet_proof }}/dropin-bypass"
     quadlet_hardened_defaults: true
     quadlet_units:
       - name: bypassed
@@ -1258,7 +1284,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/image-digest
+    quadlet_directory: "{{ quadlet_proof }}/image-digest"
     quadlet_units:
       - name: floated
         type: container
@@ -1313,7 +1339,7 @@
 
     - name: The opted-out unit is written
       ansible.builtin.stat:
-        path: /tmp/opencode/quadlet-proof/image-digest/floated.container
+        path: "{{ quadlet_proof }}/image-digest/floated.container"
       register: quadlet_floated_written
 
     - name: The opt-out is the site's explicit choice
@@ -1330,7 +1356,7 @@
     quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
     quadlet_verify: false
-    quadlet_directory: /tmp/opencode/quadlet-proof/image-short-digest
+    quadlet_directory: "{{ quadlet_proof }}/image-short-digest"
     quadlet_units:
       - name: shortdigest
         type: container
@@ -1365,3 +1391,58 @@
           - "'VACUOUS' not in quadlet_refusal"
           - "'without a digest' in quadlet_refusal"
         fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A boot key outside [Install] does not satisfy the contract
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/install-section"
+    quadlet_units:
+      - name: misplaced
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          WantedBy=default.target
+
+          [Install]
+  tasks:
+    - name: The misplaced boot key fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a boot key outside [Install] was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the section, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'[Install]' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: The run's proof root is removed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: The proof root is removed
+      ansible.builtin.file:
+        path: "{{ quadlet_proof }}"
+        state: absent

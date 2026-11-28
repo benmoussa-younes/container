@@ -19,7 +19,7 @@ quadlet_user: "{{ podman_user | default(account_name | default('')) }}"
 #   type:    container | volume | network | pod | image | build | kube
 #   state:   present | absent (default present)
 #   content: the unit file as a string, required when the state is present
-#   mode:    the file mode (default 0644)
+#   mode:    the file mode (default 0600: the account's, not the host's)
 #   boot:    a container or kube unit must carry `[Install]` with `WantedBy=` or
 #            `RequiredBy=`, because Quadlet applies that section at generation and
 #            starts nothing at boot without it. `boot: false` is the explicit

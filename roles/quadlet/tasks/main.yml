@@ -149,21 +149,25 @@
     - name: Every container or kube unit can start at boot, or says it must not
       ansible.builtin.assert:
         that:
-          - (item.content is search('(?m)^[ \t]*\[Install\][ \t]*$')
-             and (item.content is search('(?mi)^[ \t]*WantedBy[ \t]*=')
-                  or item.content is search('(?mi)^[ \t]*RequiredBy[ \t]*=')))
+          - quadlet_install_section is search('(?m)^[ \t]*(WantedBy|RequiredBy)[ \t]*=')
           - (not (item.name is search('@$'))
-             or item.content is search('(?mi)^[ \t]*DefaultInstance[ \t]*='))
+             or quadlet_install_section is search('(?m)^[ \t]*DefaultInstance[ \t]*='))
         fail_msg: >-
-          `{{ item.name }}` declares no `[Install]` section, so Quadlet generates
-          the unit and it never starts at boot. Add `WantedBy=default.target`, or
-          declare `boot: false` for a unit another one starts. A template name
-          (`@`) also needs `DefaultInstance=` in `[Install]`: Quadlet activates
-          no instance without it.
+          `{{ item.name }}` declares no usable `[Install]` section, so Quadlet
+          generates the unit and it never starts at boot. Add
+          `WantedBy=default.target` inside `[Install]`, or declare `boot: false`
+          for a unit another one starts. A template name (`@`) also needs
+          `DefaultInstance=` in `[Install]`: Quadlet activates no instance
+          without it.
         quiet: true
       loop: "{{ quadlet_units }}"
       loop_control:
         label: "{{ item.name }}"
+      vars:
+        quadlet_install_section: >-
+          {{ item.content
+             | regex_findall('(?ms)^[ \t]*\[Install\][ \t]*\n(.*?)(?=^[ \t]*\[|\Z)')
+             | join('\n') }}
       when:
         - (item.type | default('')) in ['container', 'kube']
         - (item.state | default('present')) == 'present'
@@ -347,7 +351,7 @@
         dest: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}"
         owner: "{{ quadlet_user }}"
         group: "{{ quadlet_group }}"
-        mode: "{{ item.mode | default('0644') }}"
+        mode: "{{ item.mode | default('0600') }}"
       loop: "{{ quadlet_units }}"
       loop_control:
         label: "{{ item.name }}.{{ item.type }}"
@@ -483,7 +487,7 @@
         dest: "{{ quadlet_directory }}/{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1.name }}"
         owner: "{{ quadlet_user }}"
         group: "{{ quadlet_group }}"
-        mode: "0644"
+        mode: "0600"
       loop: "{{ quadlet_units | subelements('dropins', skip_missing=True) }}"
       loop_control:
         label: "{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1.name }}"
@@ -496,7 +500,7 @@
         dest: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}.d/.ansible-managed.json"
         owner: "{{ quadlet_user }}"
         group: "{{ quadlet_group }}"
-        mode: "0644"
+        mode: "0600"
       loop: "{{ quadlet_units }}"
       loop_control:
         label: "{{ item.name }}.{{ item.type }}.d/.ansible-managed.json"

@@ -3,7 +3,11 @@
 #
 # The container base image.
 #
-#   podman build -t localhost/benmoussa/container:0.1.0 images/base
+#   podman build \
+#     --build-arg VERSION="$(cat VERSION)" \
+#     --build-arg REVISION="$(git rev-parse HEAD)" \
+#     --build-arg CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+#     -t localhost/benmoussa/container:test images/base
 #
 # The base is Debian's minimal one, pinned by digest for reproducibility. The
 # image carries what a workload needs and nothing else: TLS roots, the zone
@@ -16,10 +20,21 @@
 # version is pinned here.
 FROM docker.io/library/debian:13-slim@sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392
 
+# The site passes these at build time; nothing here hardcodes the collection
+# version, so a release cannot leave a stale label behind. `CREATED` is the
+# site's choice: a fixed value makes the build reproducible, `date -u` does not.
+ARG VERSION=""
+ARG REVISION=""
+ARG CREATED=""
+
 LABEL org.opencontainers.image.title="Container base image" \
       org.opencontainers.image.description="Debian minimal base for the site's containers: TLS roots, tzdata, curl, procps, a non-root account and no setuid" \
       org.opencontainers.image.vendor="Younes BENMOUSSA" \
-      org.opencontainers.image.version="0.1.0" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.created="${CREATED}" \
+      org.opencontainers.image.source="https://github.com/benmoussa-younes/container" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later" \
       org.opencontainers.image.base.name="docker.io/library/debian:13-slim" \
       org.opencontainers.image.base.digest="sha256:7378260c0a098d27ac206225db5e7d92b8c7c84ea7afccc86eeb513756bbd392"
 

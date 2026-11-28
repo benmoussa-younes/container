@@ -27,6 +27,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -103,6 +105,15 @@ jobs:
 
       - name: Verify release assets
         run: scripts run tools/scripts/binaries/verify-release.scs
+
+      # The tag is signed by the maintainer, but its signature covers the commit
+      # and not the bytes of the two archives built here. The attestation binds
+      # the archives named in SHA256SUMS to this workflow run and repository;
+      # verify it with `gh attestation verify <asset> --repo <repo>`.
+      - name: Attest the release assets
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: dist/*.tar.gz
 
       - name: Extract the changelog section
         run: |

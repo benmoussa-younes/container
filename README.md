@@ -124,6 +124,8 @@ checksums before installing:
 
 ```sh
 sha256sum -c SHA256SUMS
+gpg --verify SHA256SUMS.asc SHA256SUMS   # when the release carries the maintainer's signature
+gh attestation verify benmoussa-container-0.3.0.tar.gz --repo benmoussa-younes/container
 ```
 
 ## Usage
@@ -229,7 +231,11 @@ root, no setuid bit and no package list. It writes nothing outside a tmpfs,
 which is what makes the read-only defaults of the Quadlet role usable.
 
 ```sh
-podman build -t localhost/benmoussa/container:test images/base
+podman build \
+  --build-arg VERSION="$(cat VERSION)" \
+  --build-arg REVISION="$(git rev-parse HEAD)" \
+  --build-arg CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -t localhost/benmoussa/container:test images/base
 podman run --rm localhost/benmoussa/container:test sh -c 'id; cat /etc/os-release'
 ```
 
@@ -330,6 +336,15 @@ defaults are on. Empty it deliberately if a site needs one.
 
 - It does not enable the rootful Podman socket, and it does not write
   `/etc/containers/systemd`.
+- It does not disable the account's `podman.socket` by default
+  (`podman_socket_enabled: true`): the socket's API carries the account's
+  engine rights, so exposing it over TCP or to another group widens what that
+  account can do. A site that runs only the CLI sets
+  `podman_socket_enabled: false`.
+- It does not add a mandatory access control layer: on Debian rootless Podman
+  reports `apparmorEnabled=false` and SELinux is not enabled, so the
+  distribution's seccomp profile is the confinement the engine applies. A site
+  that needs AppArmor or SELinux configures it on the host.
 - It does not build an image: it ships the base `Containerfile`, and the site
   runs `podman build`. It does not pull, start or stop a container, a pod, a
   volume or a network.
@@ -351,9 +366,10 @@ defaults are on. Empty it deliberately if a site needs one.
   covers `.container` and `.image`, where `image_digest: false` is the opt-out.
   `AutoUpdate=registry` needs the `podman-auto-update.timer`: the role enables
   it when `podman_auto_update: true`.
-- It does not put a secret in a unit: `quadlet_units` is written `0644` and is
-  not scanned for credentials; keep a credential in the site's vault and hand it
-  to the container through the unit's own mechanism.
+- It does not put a secret in a unit: `quadlet_units` is written `0600` and its
+  drop-ins too, so a credential left in the text is readable by the account
+  only; it is still not scanned for credentials, so keep one in the site's
+  vault and hand it to the container through the unit's own mechanism.
 - It waits up to 30 s for `/run/user/<uid>` after enabling linger; a slower host
   fails the run instead of waiting longer.
 - The gate's wiring checks are greps and `--check` runs; the applied paths

@@ -29,7 +29,8 @@ argument_specs:
           One entry per unit file, with `name` (stem), `type` (container,
           volume, network, pod, image, build or kube), `state` (present or
           absent), `content` (the unit file, required when present), an optional
-          `mode`, an optional `boot` that defaults to true: a container or
+          `mode` (0600 by default: the unit text is the account's, not the
+          host's), an optional `boot` that defaults to true: a container or
           kube unit must then carry `[Install]` with `WantedBy=` or
           `RequiredBy=`, because Quadlet starts nothing at boot without it
           (`boot: false` is the opt-out for a unit another unit starts), and an

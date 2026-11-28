@@ -136,7 +136,10 @@ argument_specs:
       podman_socket_enabled:
         type: bool
         required: false
-        description: Whether the rootless user socket is enabled.
+        description: >-
+          Whether the rootless user socket is enabled. Its API carries the
+          account's engine rights: set it false on a host that runs only the
+          CLI.
       podman_auto_update:
         type: bool
         required: false
