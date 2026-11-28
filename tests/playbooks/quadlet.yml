@@ -10,12 +10,12 @@
   hosts: localhost
   connection: local
   gather_facts: false
-  vars: &sandbox
+  vars:
     quadlet_enabled: true
     quadlet_user: "{{ lookup('env', 'USER') }}"
-    quadlet_directory: /tmp/opencode/quadlet-proof/spacing
     quadlet_reload: false
     quadlet_verify: false
+    quadlet_directory: /tmp/opencode/quadlet-proof/spacing
     quadlet_hardened_defaults: true
     quadlet_units:
       - name: relaxed
@@ -60,7 +60,10 @@
   connection: local
   gather_facts: false
   vars:
-    <<: *sandbox
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
     quadlet_directory: /tmp/opencode/quadlet-proof/no-install
     quadlet_units:
       - name: noboot
@@ -101,7 +104,10 @@
   connection: local
   gather_facts: false
   vars:
-    <<: *sandbox
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
     quadlet_directory: /tmp/opencode/quadlet-proof/boot-false
     quadlet_units:
       - name: manual
@@ -131,7 +137,10 @@
   connection: local
   gather_facts: false
   vars:
-    <<: *sandbox
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
     quadlet_directory: /tmp/opencode/quadlet-proof/duplicate
     quadlet_units:
       - name: twice
@@ -183,7 +192,10 @@
   connection: local
   gather_facts: false
   vars:
-    <<: *sandbox
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
     quadlet_directory: /tmp/opencode/quadlet-proof/bound
     quadlet_default_memory: 256M
     quadlet_units:
@@ -219,7 +231,10 @@
   connection: local
   gather_facts: false
   vars:
-    <<: *sandbox
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
     quadlet_directory: /tmp/opencode/quadlet-proof/withdraw-hardening
     quadlet_hardened_defaults: true
     quadlet_units: []
@@ -261,7 +276,10 @@
   connection: local
   gather_facts: false
   vars:
-    <<: *sandbox
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
     quadlet_directory: /tmp/opencode/quadlet-proof/withdraw-unit
     quadlet_default_memory: 256M
     quadlet_units:
@@ -320,10 +338,11 @@
   connection: local
   gather_facts: false
   vars:
-    <<: *sandbox
-    quadlet_directory: /tmp/opencode/quadlet-proof/verify-without-reload
-    quadlet_verify: true
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
     quadlet_reload: false
+    quadlet_verify: true
+    quadlet_directory: /tmp/opencode/quadlet-proof/verify-without-reload
   tasks:
     - name: The read-back without a reload fails the run
       block:
