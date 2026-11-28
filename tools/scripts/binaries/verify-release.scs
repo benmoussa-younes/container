@@ -65,6 +65,37 @@ function listing(archive: path) -> list<string> {
     }
 }
 
+function command(directory: path, arguments: list<string>) -> process_result {
+    match process.run(process.request("git", arguments).with_working_directory(directory)) {
+        ok(completed) => {
+            return completed
+        }
+        error(failure) => {
+            io.write_standard_error_line("verify-release: cannot run git: {failure.kind}")
+            process.exit_with_code(1)
+        }
+    }
+}
+
+function checksum_names(text: string) -> list<string> {
+    let mutable names: list<string> = []
+    for line in text.lines() {
+        let trimmed = line.trim_whitespace()
+        if trimmed.length() > 0 {
+            let mutable words: list<string> = []
+            for part in trimmed.split(" ") {
+                if part.length() > 0 {
+                    words.append(part)
+                }
+            }
+            if words.length() > 0 {
+                names.append(words.get_at_index(words.length() - 1).value_or(""))
+            }
+        }
+    }
+    return names
+}
+
 let version = read_text(root, "VERSION").trim_whitespace()
 let collection_name = "benmoussa-container-{version}.tar.gz"
 let source_name = "container-{version}-src.tar.gz"
@@ -91,6 +122,40 @@ if filesystem.path_exists(directory / "SHA256SUMS") {
     }
 }
 
+if filesystem.path_exists(directory / "SHA256SUMS") {
+    let names = checksum_names(read_text(directory, "SHA256SUMS"))
+    let expected = [collection_name, source_name]
+    let mutable wrong: list<string> = []
+    if names.length() != 2 {
+        wrong.append("two entries expected")
+    }
+    for name in expected {
+        let mutable seen = false
+        for listed in names {
+            if listed == name {
+                seen = true
+            }
+        }
+        if not seen {
+            wrong.append("missing " + name)
+        }
+    }
+    for listed in names {
+        let mutable known = false
+        for name in expected {
+            if listed == name {
+                known = true
+            }
+        }
+        if not known {
+            wrong.append("unexpected " + listed)
+        }
+    }
+    for problem in note(wrong.length() == 0, "checksums list", wrong.join(", ")) {
+        failures.append(problem)
+    }
+}
+
 if filesystem.path_exists(directory / collection_name) {
     let entries = listing(directory / collection_name)
     let required = ["roles/", "playbooks/", "meta/runtime.yml", "MANIFEST.json", "FILES.json", "README.md", "CHANGELOG.md", "LICENSE", "NOTICE", "REUSE.toml", "LICENSES/"]
@@ -112,6 +177,20 @@ if filesystem.path_exists(directory / collection_name) {
     }
     for problem in note(present.length() == 0, "collection exclusion", present.join(", ")) {
         failures.append(problem)
+    }
+
+    match process.run(process.request("tar", ["-xzf", (directory / collection_name).to_string(), "-O", "MANIFEST.json"])) {
+        ok(completed) => {
+            let found = completed.exit_code == 0 and completed.standard_output.contains("\"version\": \"" + version + "\"")
+            for problem in note(found, "manifest version", completed.standard_error.trim_whitespace()) {
+                failures.append(problem)
+            }
+        }
+        error(failure) => {
+            for problem in note(false, "manifest version", "cannot run tar: {failure.kind}") {
+                failures.append(problem)
+            }
+        }
     }
 }
 
@@ -149,6 +228,23 @@ if filesystem.path_exists(directory / source_name) {
     for problem in note(present.length() == 0, "source exclusion", present.join(", ")) {
         failures.append(problem)
     }
+}
+
+let tag = "v" + version
+let head = command(root, ["rev-parse", "HEAD"])
+let tag_commit = command(root, ["rev-parse", "{tag}^\{commit\}"])
+let described = command(root, ["describe", "--tags", "--exact-match", "HEAD"])
+let mutable tag_ok = false
+let mutable tag_detail = "no local tag and no exact tag on HEAD"
+if head.exit_code == 0 and tag_commit.exit_code == 0 {
+    tag_ok = head.standard_output.trim_whitespace() == tag_commit.standard_output.trim_whitespace()
+    tag_detail = "HEAD {head.standard_output.trim_whitespace()} tag {tag_commit.standard_output.trim_whitespace()}"
+} else if head.exit_code == 0 and described.exit_code == 0 {
+    tag_ok = described.standard_output.trim_whitespace() == tag
+    tag_detail = "describe {described.standard_output.trim_whitespace()}"
+}
+for problem in note(tag_ok, "tag commit", tag_detail) {
+    failures.append(problem)
 }
 
 if failures.length() == 0 {

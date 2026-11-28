@@ -75,16 +75,25 @@ if status.standard_output.trim_whitespace().length() > 0 {
 }
 
 let tag = "v" + version
-if ci {
-    io.write_standard_output_line("CI: the tag is verified by the workflow (`TAG` = `v{version}`)")
-} else {
-    let tag_lookup = command(root, process.request("git", ["rev-parse", "-q", "--verify", "refs/tags/{tag}"]))
-    if tag_lookup.exit_code != 0 {
-        stop("the signed tag `{tag}` does not exist")
+let tag_lookup = command(root, process.request("git", ["rev-parse", "-q", "--verify", "refs/tags/{tag}"]))
+if tag_lookup.exit_code == 0 {
+    let tag_commit = command(root, process.request("git", ["rev-parse", "{tag}^\{commit\}"]))
+    let head_commit = command(root, process.request("git", ["rev-parse", "HEAD"]))
+    let same_commit = tag_commit.exit_code == 0 and head_commit.exit_code == 0
+    let same_text = tag_commit.standard_output.trim_whitespace() == head_commit.standard_output.trim_whitespace()
+    if not same_commit or not same_text {
+        stop("HEAD is not the commit of `{tag}`; check out the tag before packaging")
     }
-    let tag_check = command(root, process.request("git", ["verify-tag", tag]))
-    if tag_check.exit_code != 0 {
-        stop("`git verify-tag {tag}` refused the tag")
+    if not ci {
+        let tag_check = command(root, process.request("git", ["verify-tag", tag]))
+        if tag_check.exit_code != 0 {
+            stop("`git verify-tag {tag}` refused the tag")
+        }
+    }
+} else {
+    let described = command(root, process.request("git", ["describe", "--tags", "--exact-match", "HEAD"]))
+    if described.exit_code != 0 or described.standard_output.trim_whitespace() != tag {
+        stop("`{tag}` is neither a local tag nor the exact tag of HEAD")
     }
 }
 
