@@ -139,3 +139,14 @@
     podman_userns_sysctl: /tmp/opencode/podman-proof-userns/62-podman-userns.conf
   roles:
     - role: podman
+
+- name: A workstation is an eligible edition
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    container_host_edition: workstation
+    podman_enabled: false
+    podman_userns_sysctl: /tmp/opencode/podman-proof-workstation/62-podman-userns.conf
+  roles:
+    - role: podman

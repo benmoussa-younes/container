@@ -66,8 +66,12 @@ It is shipped as the collection `benmoussa.container`.
   and a registry repository ending in `.image` needs an explicit `:tag` or
   `@sha256:`.
 - **An edition it reads, never writes**: `container_host_edition` names the
-  edition the host already carries (`server` today). Applying the engine role
-  without it, or with another value, fails the run instead of guessing.
+  edition the host already carries (`server` or `workstation`). Applying the
+  engine role without it, or with another value, fails the run instead of
+  guessing. A workstation runs the same rootless engine and the same hardening;
+  a site that develops on it relaxes the defaults it needs
+  (`podman_read_only: false`, `quadlet_image_digest_required: false`, ...)
+  rather than the edition selecting a different profile.
 - **The site's Quadlet declarations**: `container`, `volume`, `network`, `pod`,
   `image`, `build` and `kube` files, including template names
   (`foo@.container`) and their drop-ins, in the owning account's generator
@@ -156,7 +160,7 @@ all:
     # The engine. `podman_user` follows `account_name`; name another account
     # only when you turn `account_enabled` off and own that account yourself.
     # `container_host_edition` is the edition the host already carries: the
-    # collection owns no identity and accepts `server` today.
+    # collection owns no identity and accepts `server` or `workstation`.
     podman_enabled: true
     container_host_edition: server
     podman_registries: [docker.io]
