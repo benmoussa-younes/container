@@ -208,7 +208,17 @@ function git_grep(root: path, flags: list<string>, pattern: string, paths: list<
                 return completed.standard_output.lines()
             }
             if completed.exit_code == 1 {
-                return []
+                match process.run(process.request("git", ["ls-files", "--cached"]).with_working_directory(root)) {
+                    ok(indexed) => {
+                        if indexed.exit_code != 0 {
+                            return ["! git grep could not read the index ({indexed.exit_code}): {indexed.standard_error.trim_whitespace()}"]
+                        }
+                        return []
+                    }
+                    error(failure) => {
+                        return ["! cannot run git: {failure.kind}"]
+                    }
+                }
             }
             # A git error is not an empty result: the sentinel line belongs to no
             # owner, so a failure turns the check red instead of passing.
@@ -812,8 +822,12 @@ for problem in check_licences(root, false) {
     failures.append(problem)
 }
 function check_secret_shapes(root: path) -> list<string> {
-    let matches = git_grep(root, ["-i", "--extended-regexp"], secrets.joined(), [".", ":(exclude)LICENSES", ":(exclude)tools/scripts/modules/secrets.scs"])
-    return note(matches.length() == 0, "no secret shape", matches.join(", "))
+    let matches = git_grep(root, ["-i", "--extended-regexp"], secrets.joined(), [".", ":(exclude)LICENSES", ":(exclude)tools/scripts/modules/secrets.scs", ":(exclude)inventories"])
+    let mutable result = note(matches.length() == 0, "no secret shape", matches.join(", "))
+    for problem in git_search(root, ["grep", "--cached", "-IniE", "-e", secrets.joined(), "--", "inventories"], "no secret shape in tracked inventories") {
+        result.append(problem)
+    }
+    return result
 }
 
 for problem in check_secret_shapes(root) {

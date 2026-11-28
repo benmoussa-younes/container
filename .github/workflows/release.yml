@@ -150,7 +150,9 @@ jobs:
           collection="dist/benmoussa-container-${version}.tar.gz"
           source="dist/container-${version}-src.tar.gz"
           checksums="dist/SHA256SUMS"
-          test -f "$collection" && test -f "$source" && test -f "$checksums"
+          for asset in "$collection" "$source" "$checksums"; do
+            test -f "$asset" || { echo "missing $asset" >&2; exit 1; }
+          done
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$collection" "$source" "$checksums" --clobber
           else
