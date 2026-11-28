@@ -3,6 +3,11 @@
 - name: The Quadlet declarations are configured
   when: quadlet_enabled | bool
   block:
+    - name: The drop-in bookkeeping starts empty
+      ansible.builtin.set_fact:
+        quadlet_previous_dropins: {}
+        quadlet_stale_dropins: []
+
     - name: The owning account is declared
       ansible.builtin.assert:
         that:
@@ -99,6 +104,43 @@
           the first: declared {{ quadlet_declared | join(', ') }}. Give one of
           them another name.
         quiet: true
+
+    - name: Every declaration's drop-ins are a list of unique entries
+      ansible.builtin.assert:
+        that:
+          - item.dropins is not defined
+            or ((item.dropins | type_debug) == 'list'
+                and (item.state | default('present')) != 'absent'
+                and (item.dropins | map(attribute='name') | unique | length)
+                    == (item.dropins | length))
+        fail_msg: >-
+          `{{ item.name }}` declares drop-ins that are not a list of uniquely
+          named entries. Declare `dropins` as a list of `{name, content}`
+          entries, and not on a unit whose state is absent.
+        quiet: true
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Every declared drop-in is complete
+      ansible.builtin.assert:
+        that:
+          - (item.1 is mapping
+             and item.1.name is defined
+             and item.1.name | length > 0
+             and item.1.name is match('^[A-Za-z0-9][A-Za-z0-9_.-]*\.conf$')
+             and item.1.name not in quadlet_product_dropins
+             and item.1.content is defined
+             and item.1.content | string | length > 0)
+        fail_msg: >-
+          `{{ item.0.name }}` declares the drop-in `{{ item.1 }}`: it needs a
+          name ending in `.conf`, without a directory, that is not one of the
+          product's own (`{{ quadlet_product_dropins | join(', ') }}`), and a
+          non-empty content.
+        quiet: true
+      loop: "{{ quadlet_units | subelements('dropins', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1.name | default('?') if item.1 is mapping else '?' }}"
 
     # Quadlet applies `[Install]` at generation and starts nothing at boot
     # without it, so a container unit that never says how it starts is a unit
@@ -257,6 +299,25 @@
         - quadlet_forbidden_prefixes | length > 0
         - (item.state | default('present')) == 'present'
 
+    - name: No declared drop-in carries a forbidden key prefix
+      ansible.builtin.assert:
+        that:
+          - item.1.content is not search(quadlet_forbidden_prefix_pattern)
+        fail_msg: >-
+          `{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1.name }}` carries a
+          key the product forbids while the hardened defaults are on:
+          {{ quadlet_forbidden_prefixes | join(', ') }}. A drop-in relaxes one
+          property of `quadlet_forbidden`; these keys bypass the hardening
+          drop-in as a whole. Empty `quadlet_forbidden_prefixes` deliberately.
+        quiet: true
+      loop: "{{ quadlet_units | subelements('dropins', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1.name }}"
+      when:
+        - quadlet_hardened_defaults | bool
+        - quadlet_forbidden_prefixes | length > 0
+        - (item.0.state | default('present')) == 'present'
+
     - name: The declared units are written
       ansible.builtin.copy:
         content: "{{ item.content }}"
@@ -332,6 +393,103 @@
              or item.1.value | length == 0)
       notify: Reload the user manager
 
+    # The role writes the drop-in list into a file Quadlet ignores (only `.conf`
+    # files are read), so the next run knows what it wrote and can remove what
+    # the site stopped declaring instead of leaving it active.
+    - name: The drop-in state file of every declared unit is read
+      ansible.builtin.slurp:
+        src: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}.d/.ansible-managed.json"
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}"
+      register: quadlet_dropin_manifests
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: The drop-ins the role wrote before are known per unit
+      ansible.builtin.set_fact:
+        quadlet_previous_dropins: >-
+          {{ dict(quadlet_dropin_manifests.results | default([])
+                  | selectattr('content', 'defined') | list
+                  | map(attribute='item') | map(attribute='name')
+                  | zip(quadlet_dropin_manifests.results | default([])
+                        | selectattr('content', 'defined') | list
+                        | map(attribute='item') | map(attribute='type'))
+                  | map('join', '.') | list
+                  | zip(quadlet_dropin_manifests.results | default([])
+                        | selectattr('content', 'defined') | list
+                        | map(attribute='content') | map('b64decode')
+                        | map('default', '[]', true) | map('from_json'))) }}
+
+    - name: The drop-ins the role wrote and no longer declares are compiled
+      ansible.builtin.set_fact:
+        quadlet_stale_dropins: >-
+          {{ quadlet_stale_dropins | default([])
+             + ((quadlet_previous_dropins[item.name ~ '.' ~ item.type] | default([]))
+                | difference(item.dropins | default([]) | map(attribute='name') | list)
+                | map('regex_replace', '^', item.name ~ '.' ~ item.type ~ '.d/') | list) }}
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}"
+
+    - name: The drop-ins the role wrote and no longer declares are removed
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}/{{ item }}"
+        state: absent
+      loop: "{{ quadlet_stale_dropins }}"
+      notify: Reload the user manager
+
+    - name: The directory of every declared drop-in exists
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}.d"
+        state: directory
+        owner: "{{ quadlet_user }}"
+        group: "{{ quadlet_group }}"
+        mode: "0755"
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}.d"
+      when:
+        - (item.state | default('present')) == 'present'
+        - item.dropins | default([]) | length > 0
+
+    - name: The declared drop-ins are written
+      ansible.builtin.copy:
+        content: "{{ item.1.content }}"
+        dest: "{{ quadlet_directory }}/{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1.name }}"
+        owner: "{{ quadlet_user }}"
+        group: "{{ quadlet_group }}"
+        mode: "0644"
+      loop: "{{ quadlet_units | subelements('dropins', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1.name }}"
+      when: (item.0.state | default('present')) == 'present'
+      notify: Reload the user manager
+
+    - name: The drop-in state file lists what the role wrote
+      ansible.builtin.copy:
+        content: "{{ item.dropins | map(attribute='name') | list | sort | to_nice_json }}\n"
+        dest: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}.d/.ansible-managed.json"
+        owner: "{{ quadlet_user }}"
+        group: "{{ quadlet_group }}"
+        mode: "0644"
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}.d/.ansible-managed.json"
+      when:
+        - (item.state | default('present')) == 'present'
+        - item.dropins | default([]) | length > 0
+
+    - name: The state file of a unit that declares no drop-in is removed
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}.d/.ansible-managed.json"
+        state: absent
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}.{{ item.type }}.d/.ansible-managed.json"
+      when: item.dropins | default([]) | length == 0
+
     - name: The withdrawn units are removed
       ansible.builtin.file:
         path: "{{ quadlet_directory }}/{{ item.name }}.{{ item.type }}"
@@ -348,7 +506,7 @@
       ansible.builtin.file:
         path: "{{ quadlet_directory }}/{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1 }}"
         state: absent
-      loop: "{{ quadlet_units | product(['50-default-memory.conf', '51-default-cpu.conf']) | list }}"
+      loop: "{{ quadlet_units | product(quadlet_product_dropins) | list }}"
       loop_control:
         label: "{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1 }}"
       when:
@@ -401,3 +559,23 @@
       when:
         - quadlet_verify | bool
         - not ansible_check_mode
+
+    - name: The user manager reads every declared drop-in
+      ansible.builtin.assert:
+        that:
+          - >-
+            item.item.dropins | default([]) | map(attribute='name') | list
+            | reject('in', item.stdout | default('')) | list | length == 0
+        fail_msg: >-
+          A declared drop-in is not part of the generated unit: `systemctl
+          --user cat` does not show it. Check that the name ends in `.conf` and
+          that the reload ran.
+        quiet: true
+      loop: "{{ quadlet_unit_readback.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.name }}.{{ item.item.type }}"
+      when:
+        - quadlet_verify | bool
+        - not ansible_check_mode
+        - item.stdout is defined
+        - item.item.dropins | default([]) | length > 0

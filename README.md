@@ -49,8 +49,9 @@ It is shipped as the collection `benmoussa.container`.
   without it, or with another value, fails the run instead of guessing.
 - **The site's Quadlet declarations**: `container`, `volume`, `network`, `pod`,
   `image`, `build` and `kube` files, including template names
-  (`foo@.container`), in the owning account's generator directory, a
-  user-manager reload and a read-back of every generated unit.
+  (`foo@.container`) and their drop-ins, in the owning account's generator
+  directory, a user-manager reload and a read-back of every generated unit and
+  every declared drop-in.
 - **A hardening baseline in one drop-in**: `container.d/*.conf` is merged into
   every container unit of the account — no new privileges, all capabilities
   dropped, read-only rootfs with tmpfs, an init, pids and ulimit bounds,
@@ -226,7 +227,7 @@ inside keep their own licences (see `NOTICE`).
 |---|---|---|
 | `account` | The login account the rootless engine runs as: the group, the account, its UID, GID, home and shell. The name, UID and GID are inventory values (`container`, 1500:1500 by default). It refuses to rewrite an existing identity and creates no subordinate ID, no linger and no engine configuration. | implemented |
 | `podman` | The rootless engine for the account `account` creates: packages, registry search path, engine drop-in with the product's defaults, user socket, the opt-in auto-update timer, linger and subordinate IDs. The read-back refuses a `vfs` store, a cgroup other than v2 and a backend other than netavark. It creates no container and never enables the rootful socket. | implemented |
-| `quadlet` | The site's Quadlet declarations (template names included), the published host-port floor, the product's global hardening drop-in, the refusal of keys that relax it and of the argument/sandbox keys whatever their value, a user-manager reload and a read-back of every generated unit. It creates no image, volume, network, pod or container. | implemented |
+| `quadlet` | The site's Quadlet declarations (template names and drop-ins included), the published host-port floor, the product's global hardening drop-in, the refusal of keys that relax it and of the argument/sandbox keys whatever their value, a user-manager reload and a read-back of every generated unit and declared drop-in. It creates no image, volume, network, pod or container. | implemented |
 
 `playbooks/site.yml` runs `account`, `podman` then `quadlet`, all opt-in with
 `account_enabled`, `podman_enabled` and `quadlet_enabled`. The account comes
@@ -254,6 +255,15 @@ unit back with `systemctl --user cat <unit>`, so a declaration the generator
 ignored fails the run. `state: absent` removes the file, the two bound drop-ins
 the product wrote beside it, and reloads the manager.
 
+An entry may also carry `dropins`: a list of `{name, content}` files written
+into `<name>.<type>.d/`. Quadlet reads every `.conf` file there and merges it
+into the generated unit, which is the narrow way to relax one property without
+emptying `quadlet_forbidden` for every unit. The role refuses a name that does
+not end in `.conf` or that the product owns (`quadlet_product_dropins`), keeps
+the list it wrote in `<name>.<type>.d/.ansible-managed.json` (a name Quadlet
+ignores), removes a drop-in the site stops declaring, and reads every declared
+drop-in back through `systemctl --user cat`.
+
 A `container` or `kube` unit must carry `[Install]` with `WantedBy=` or
 `RequiredBy=`: Quadlet applies that section at generation and starts nothing at
 boot without it, so a unit the product accepted would never come back after a
@@ -279,6 +289,11 @@ quadlet_units:
 
       [Install]
       WantedBy=default.target
+    dropins:
+      - name: 50-nofile.conf
+        content: |
+          [Container]
+          LimitNOFILE=8192
 ```
 
 ### Hardening defaults
@@ -286,8 +301,10 @@ quadlet_units:
 `quadlet_hardened_defaults: true` writes
 `container.d/10-container-edition.conf` in the account's generator directory.
 Quadlet merges it into every `.container` file; a unit's own drop-in
-(`<name>.container.d/`) is merged after it and wins. Relax one key by adding
-that drop-in beside the unit, not by editing the product's file.
+(`<name>.container.d/`) is merged after it and wins. Relax one key by declaring
+it in that unit's `dropins`, not by editing the product's file. The
+argument/sandbox keys (`quadlet_forbidden_prefixes`) stay refused there too:
+they bypass the hardening drop-in rather than relax one property.
 
 `quadlet_forbidden` names the keys a declared unit may not carry while the
 defaults are on. Empty it deliberately if a site needs one.

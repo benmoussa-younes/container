@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the run), reads the account back, and checks that the home belongs to it.
   `playbooks/site.yml` runs it first, when the engine or the declarations are
   enabled.
+- `quadlet`: a declaration carries `dropins`, a list of `{name, content}` files
+  written into `<name>.<type>.d/`. The role refuses a name that does not end in
+  `.conf`, a name the product owns, a duplicate and a drop-in on an absent unit,
+  keeps the list it wrote in `.ansible-managed.json`, removes a drop-in the site
+  stops declaring (or withdraws with its unit), and reads every declared drop-in
+  back through `systemctl --user cat`. The argument/sandbox keys stay refused in
+  a drop-in too.
 - `quadlet`: `PodmanArgs`, `GlobalArgs`, `Unmask`, `SeccompProfile` and
   `Privileged` are refused in any declared unit, whatever their value, because
   they bypass the hardening drop-in rather than relax one setting. The

@@ -29,10 +29,23 @@ argument_specs:
           One entry per unit file, with `name` (stem), `type` (container,
           volume, network, pod, image, build or kube), `state` (present or
           absent), `content` (the unit file, required when present), an optional
-          `mode`, and an optional `boot` that defaults to true: a container or
+          `mode`, an optional `boot` that defaults to true: a container or
           kube unit must then carry `[Install]` with `WantedBy=` or
-          `RequiredBy=`, because Quadlet starts nothing at boot without it.
-          `boot: false` is the opt-out for a unit another unit starts.
+          `RequiredBy=`, because Quadlet starts nothing at boot without it
+          (`boot: false` is the opt-out for a unit another unit starts), and an
+          optional `dropins`: a list of `{name, content}` entries written into
+          `<stem>.<type>.d/<name>`. Quadlet reads every `.conf` file there and
+          merges it into the generated unit, which is the narrow way to relax
+          one key of `quadlet_forbidden`; the product's own names
+          (`quadlet_product_dropins`) are refused. The role records the list it
+          wrote beside them and removes a drop-in dropped from the declaration.
+      quadlet_product_dropins:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          The per-unit drop-ins the product owns. A declaration may not use
+          those names, and withdrawing a unit removes them.
       quadlet_home:
         type: str
         required: false

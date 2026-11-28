@@ -25,10 +25,26 @@ quadlet_user: "{{ podman_user | default(account_name | default('')) }}"
 #            starts nothing at boot without it. `boot: false` is the explicit
 #            opt-out for a unit another unit starts.
 #
+#   dropins: a list of `{name, content}` entries written into
+#            `<stem>.<type>.d/<name>`: Quadlet reads every `.conf` file there and
+#            merges it into the generated unit, a unit's own drop-in winning
+#            over the product's global `container.d` one. That is the narrow way
+#            to relax one key of `quadlet_forbidden` without emptying the list
+#            for every unit. Every other name is refused, and the role keeps the
+#            list it wrote in `<stem>.<type>.d/.ansible-managed.json` so a
+#            drop-in removed from the declaration is removed from disk.
+#
 # Two declarations may not share a name and a type: the second would overwrite
 # the first file silently.
 quadlet_units: []
 quadlet_unprivileged_port_start: ""
+
+# The per-unit drop-ins the product owns: they are written from
+# `quadlet_default_memory` and `quadlet_default_cpu_quota`, so a site may not
+# declare them, and withdrawing a unit removes them.
+quadlet_product_dropins:
+  - 50-default-memory.conf
+  - 51-default-cpu.conf
 
 # The account's home is read from the passwd record at role start (see the
 # tasks). The empty default keeps argument validation from resolving a fact that

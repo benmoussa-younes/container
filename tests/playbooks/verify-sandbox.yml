@@ -120,6 +120,32 @@
           - podman_sandbox_auto_update.stdout | trim == 'active'
         fail_msg: "{{ podman_sandbox_auto_update.stdout | default('nothing') }}"
 
+    - name: The declared Quadlet unit is read back
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: systemctl --user cat sandbox-state-volume.service
+      become: true
+      become_user: "{{ account_name }}"
+      vars:
+        podman_sandbox_uid: "{{ ansible_facts.getent_passwd[account_name][1] | default('') }}"
+        podman_sandbox_home: "{{ ansible_facts.getent_passwd[account_name][4] | default('/') }}"
+      environment:
+        HOME: "{{ podman_sandbox_home }}"
+        USER: "{{ account_name }}"
+        LOGNAME: "{{ account_name }}"
+        XDG_RUNTIME_DIR: "/run/user/{{ podman_sandbox_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ podman_sandbox_uid }}/bus"
+      register: podman_sandbox_quadlet
+      changed_when: false
+      failed_when: false
+
+    - name: The generated unit carries the declared drop-in
+      ansible.builtin.assert:
+        that:
+          - podman_sandbox_quadlet.rc == 0
+          - "'sandbox-state.volume.d/50-copy.conf' in podman_sandbox_quadlet.stdout"
+          - "'Copy=true' in podman_sandbox_quadlet.stdout"
+        fail_msg: "{{ podman_sandbox_quadlet.stdout | default('nothing') }}"
+
     - name: The kernel mapping is read
       ansible.builtin.command:  # noqa: command-instead-of-module
         cmd: "podman unshare cat {{ item }}"
