@@ -11,35 +11,51 @@
 # the two files into one answer, and an answer that needs a rewrite is refused
 # unless the repair is declared. `subuid.yml` applies the answer. Keeping the two
 # apart is what lets a fixture prove the decision without root.
-- name: The subordinate ID source is read
+- name: The identifier sources are read
   ansible.builtin.slurp:
     src: "{{ podman_subid_nsswitch_file }}"
   register: podman_subid_nsswitch
   check_mode: false
   failed_when: false
 
-# shadow-utils 4.9 lets `/etc/nsswitch.conf` put a `subid:` line in front of
-# the files (`subid: sss`), and then `/etc/subuid` is not the source of truth
+# shadow-utils 4.9 lets `/etc/nsswitch.conf` delegate subordinate IDs to an NSS
+# provider (`subid: sss`), and then `/etc/subuid` is not the source of truth
 # (podman's rootless tutorial names the plugin). The plan reads the files, so a
-# host that delegates the identifiers is refused instead of half-configured.
-- name: The subordinate IDs come from the files the plan reads
+# host that delegates them is refused. The account files are read the same way,
+# so their providers are checked too: a UID that only an identity server knows
+# could fall inside the block and no local file would show it. `systemd` stays
+# allowed because `nss-systemd` only fills the dynamic range (61184-65519),
+# which no subordinate block can contain.
+- name: The identifier sources are the files the plan reads
   ansible.builtin.assert:
     that:
-      - podman_subid_nss_providers | length == 0 or podman_subid_nss_providers == ['files']
+      - podman_subid_nss_offenders | length == 0
     fail_msg: >-
-      {{ podman_subid_nsswitch_file }} declares `subid: {{ podman_subid_nss_providers | join(' ') }}`.
-      The plan reads `{{ podman_subuid_file }}` and `{{ podman_subgid_file }}`,
-      which such a host does not consult; the ranges may come from an identity
-      server instead. Configure the identifiers locally, or declare the range
-      yourself in a repository that owns the provider.
+      {{ podman_subid_nsswitch_file }} delegates
+      {{ podman_subid_nss_offenders | join(', ') }} to a provider the plan cannot
+      read. The plan reads `{{ podman_subuid_file }}`, `{{ podman_subgid_file }}`,
+      `{{ podman_subid_passwd_file }}` and `{{ podman_subid_group_file }}`; on
+      such a host an account or a subordinate range may come from an identity
+      server, and the block could map a UID nothing local declares. Configure the
+      identifiers locally, or own the range in the repository that declares the
+      provider.
     quiet: true
   vars:
-    podman_subid_nss_line: >-
-      {{ (podman_subid_nsswitch.content | default('') | b64decode).splitlines()
-         | select('match', '^\s*subid:') | list }}
-    podman_subid_nss_providers: >-
-      {{ ((podman_subid_nss_line[0].split(':')[1].split('#')[0].split())
-          if podman_subid_nss_line | length > 0 else []) }}
+    podman_subid_nss_offenders: >-
+      {%- set out = [] -%}
+      {%- for line in (podman_subid_nsswitch.content | default('') | b64decode).splitlines() -%}
+      {%- set parts = line.split('#')[0].split(':') -%}
+      {%- if parts | length > 1 -%}
+      {%- set database = parts[0] | trim -%}
+      {%- set providers = parts[1].split() -%}
+      {%- if (database == 'subid' and providers | reject('equalto', 'files') | list | length > 0)
+             or (database in ['passwd', 'group']
+                 and providers | reject('in', ['files', 'systemd']) | list | length > 0) -%}
+      {%- set _ = out.append(database ~ ': ' ~ providers | join(' ')) -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ out }}
 
 - name: The subordinate ID plan is computed
   ansible.builtin.command:  # noqa: command-instead-of-module
