@@ -44,6 +44,7 @@
         cmd: cat /proc/sys/net/ipv4/ip_unprivileged_port_start
       register: quadlet_port_floor
       changed_when: false
+      check_mode: false
       when: quadlet_unprivileged_port_start | string | length == 0
 
     - name: The owning account's primary group is known
@@ -99,10 +100,14 @@
           - (item.content is search('(?m)^[ \t]*\[Install\][ \t]*$')
              and (item.content is search('(?mi)^[ \t]*WantedBy[ \t]*=')
                   or item.content is search('(?mi)^[ \t]*RequiredBy[ \t]*=')))
+          - (not (item.name is search('@$'))
+             or item.content is search('(?mi)^[ \t]*DefaultInstance[ \t]*='))
         fail_msg: >-
           `{{ item.name }}` declares no `[Install]` section, so Quadlet generates
           the unit and it never starts at boot. Add `WantedBy=default.target`, or
-          declare `boot: false` for a unit another one starts.
+          declare `boot: false` for a unit another one starts. A template name
+          (`@`) also needs `DefaultInstance=` in `[Install]`: Quadlet activates
+          no instance without it.
         quiet: true
       loop: "{{ quadlet_units }}"
       loop_control:
@@ -212,7 +217,7 @@
         quadlet_published_ports: >-
           {{ item.content | default('')
              | regex_findall('(?m)^[ \t]*PublishPort[ \t]*=[ \t]*[^\n]+')
-             | map('regex_findall', '[=:]([0-9]+):[0-9]+') | flatten
+             | map('regex_findall', '[=:][ \t]*([0-9]+)(?:-[0-9]+)?:[0-9]+(?:-[0-9]+)?') | flatten
              | map('int') | list }}
 
     - name: The declared units are written

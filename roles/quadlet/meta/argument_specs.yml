@@ -90,8 +90,9 @@ argument_specs:
           Lines a declared container unit may not carry while the hardened
           defaults are on. Empty it to let a site declare any key.
       quadlet_unprivileged_port_start:
-        type: int
+        type: str
         required: false
+        default: ""
         description: >-
           The host port floor a declared `PublishPort` must reach. Empty means
           the host's `net.ipv4.ip_unprivileged_port_start`, read from the

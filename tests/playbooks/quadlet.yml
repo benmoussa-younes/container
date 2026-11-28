@@ -480,10 +480,13 @@
           WantedBy=default.target
       - name: probe@
         type: container
-        boot: false
         content: |
           [Container]
           Image=docker.io/library/alpine:3.20
+
+          [Install]
+          WantedBy=default.target
+          DefaultInstance=probe
   tasks:
     - name: The declarations are applied
       ansible.builtin.include_role:
@@ -505,3 +508,202 @@
         that:
           - quadlet_template_unit.stat.isreg | default(false)
           - "'PublishPort=8443:443' in (quadlet_high_port.content | b64decode)"
+
+- name: A port written with spaces around the equal sign is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: /tmp/opencode/quadlet-proof/spaced-port
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: 1024
+    quadlet_units:
+      - name: spacedport
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+          PublishPort = 443:443
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The spaced low port fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a spaced low port was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the spaced port, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'443' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A port range below the floor is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: /tmp/opencode/quadlet-proof/port-range
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: 1024
+    quadlet_units:
+      - name: rangedport
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+          PublishPort=443-445:443-445
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The low range fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a low port range was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the range, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'443' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: The kernel floor is read when no floor is declared
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: /tmp/opencode/quadlet-proof/kernel-floor
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: ""
+    quadlet_units:
+      - name: kernelfloor
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+          PublishPort=443:443
+
+          [Install]
+          WantedBy=default.target
+  pre_tasks:
+    - name: The kernel floor is read
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: cat /proc/sys/net/ipv4/ip_unprivileged_port_start
+      register: quadlet_kernel_floor
+      changed_when: false
+
+  tasks:
+    - name: The low port fails the run against the kernel value
+      when: quadlet_kernel_floor.stdout | trim | int > 443
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: the kernel floor did not refuse the low port"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the kernel floor
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'443' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+      when: quadlet_kernel_floor.stdout | trim | int > 443
+
+- name: A template unit with [Install] but no DefaultInstance is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: /tmp/opencode/quadlet-proof/template-default-instance
+    quadlet_hardened_defaults: true
+    quadlet_units:
+      - name: "tpl@"
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The template without DefaultInstance fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a template with [Install] and no DefaultInstance was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on DefaultInstance, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'DefaultInstance' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"

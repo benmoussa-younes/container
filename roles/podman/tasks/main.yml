@@ -293,6 +293,16 @@
         fail_msg: "podman.socket is not active for {{ podman_user }}."
       when: podman_socket_enabled | bool and not ansible_check_mode
 
+    - name: The auto-update timer needs the account's user manager
+      ansible.builtin.assert:
+        that:
+          - not (podman_auto_update | bool) or (podman_linger | bool)
+        fail_msg: >-
+          podman_auto_update requires podman_linger: the timer runs in the
+          account's user manager, which exists without a login only while the
+          account lingers.
+        quiet: true
+
     - name: The auto-update timer is enabled
       ansible.builtin.command:  # noqa: command-instead-of-module
         cmd: systemctl --user enable --now podman-auto-update.timer
