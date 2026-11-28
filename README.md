@@ -226,7 +226,7 @@ inside keep their own licences (see `NOTICE`).
 |---|---|---|
 | `account` | The login account the rootless engine runs as: the group, the account, its UID, GID, home and shell. The name, UID and GID are inventory values (`container`, 1500:1500 by default). It refuses to rewrite an existing identity and creates no subordinate ID, no linger and no engine configuration. | implemented |
 | `podman` | The rootless engine for the account `account` creates: packages, registry search path, engine drop-in with the product's defaults, user socket, the opt-in auto-update timer, linger and subordinate IDs. The read-back refuses a `vfs` store, a cgroup other than v2 and a backend other than netavark. It creates no container and never enables the rootful socket. | implemented |
-| `quadlet` | The site's Quadlet declarations, the product's global hardening drop-in, the refusal of keys that relax it, a user-manager reload and a read-back of every generated unit. It creates no image, volume, network, pod or container. | implemented |
+| `quadlet` | The site's Quadlet declarations (template names included), the published host-port floor, the product's global hardening drop-in, the refusal of keys that relax it and of the argument/sandbox keys whatever their value, a user-manager reload and a read-back of every generated unit. It creates no image, volume, network, pod or container. | implemented |
 
 `playbooks/site.yml` runs `account`, `podman` then `quadlet`, all opt-in with
 `account_enabled`, `podman_enabled` and `quadlet_enabled`. The account comes

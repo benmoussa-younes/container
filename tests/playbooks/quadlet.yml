@@ -798,3 +798,51 @@
           - "'VACUOUS' not in quadlet_refusal"
           - "'Unmask' in quadlet_refusal"
         fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A non-numeric port floor is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: /tmp/opencode/quadlet-proof/port-floor-typo
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: "word"
+    quadlet_units:
+      - name: floorword
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+          PublishPort=443:443
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The word fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a non-numeric port floor was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the floor value, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'port number' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"

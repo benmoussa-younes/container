@@ -39,6 +39,16 @@
         quadlet_gid: "{{ ansible_facts.getent_passwd[quadlet_user][2] }}"
         quadlet_home: "{{ ansible_facts.getent_passwd[quadlet_user][4] }}"
 
+    - name: The declared port floor is a number or empty
+      ansible.builtin.assert:
+        that:
+          - quadlet_unprivileged_port_start | string | length == 0
+            or quadlet_unprivileged_port_start | string is match('^[0-9]+$')
+        fail_msg: >-
+          quadlet_unprivileged_port_start is '{{ quadlet_unprivileged_port_start }}':
+          declare a port number, or leave it empty to read the kernel value.
+        quiet: true
+
     - name: The unprivileged port floor is read
       ansible.builtin.command:  # noqa: command-instead-of-module
         cmd: cat /proc/sys/net/ipv4/ip_unprivileged_port_start

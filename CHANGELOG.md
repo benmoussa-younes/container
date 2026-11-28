@@ -23,7 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   published host-port floor is enforced. A `PublishPort` whose
   host port is below `quadlet_unprivileged_port_start` (the host's
   `net.ipv4.ip_unprivileged_port_start` when empty) fails the run, and template
-  unit names (`foo@.container`) are accepted.
+  unit names (`foo@.container`) are accepted. A template that carries `[Install]`
+  must also carry `DefaultInstance=`, or no instance is activated.
 - `podman`: `podman_auto_update` (false by default) enables the account's
   `podman-auto-update.timer`, without which a unit's `AutoUpdate=registry` is a
   dead setting. The engine read-back now refuses a `vfs` store, a cgroup other
