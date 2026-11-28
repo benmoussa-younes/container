@@ -53,6 +53,43 @@ function first_lines(text: string, limit: integer) -> string {
     return kept.join("\n")
 }
 
+# A playbook that fails names the reason at the end (`fatal:` and the recap); the
+# head of its output is only the play and task headers.
+function tail_lines(text: string, limit: integer) -> string {
+    let mutable all: list<string> = []
+    for line in text.lines() {
+        if line.trim_whitespace().length() > 0 {
+            all.append(line)
+        }
+    }
+    let mutable start = 0
+    if all.length() > limit {
+        start = all.length() - limit
+    }
+    let mutable kept: list<string> = []
+    let mutable index = start
+    while index < all.length() {
+        kept.append(all.get_at_index(index).value_or(""))
+        index = index + 1
+    }
+    return kept.join("\n")
+}
+
+function execute_last(root: path, request: run_request, name: string) -> list<string> {
+    match process.run(request.with_working_directory(root)) {
+        ok(completed) => {
+            if completed.exit_code == 0 {
+                return note(true, name, "")
+            }
+            let detail = completed.standard_error + "\n" + completed.standard_output
+            return note(false, name, "exit {completed.exit_code}: {tail_lines(detail, 10)}")
+        }
+        error(failure) => {
+            return note(false, name, "cannot run {request.program}: {failure.kind}")
+        }
+    }
+}
+
 function execute(root: path, request: run_request, name: string) -> list<string> {
     match process.run(request.with_working_directory(root)) {
         ok(completed) => {
@@ -696,12 +733,12 @@ for playbook in ["playbooks/site.yml", "tests/playbooks/subid.yml", "tests/playb
 }
 # The plan is proven, not grepped: the fixtures run the role's own tasks and the
 # two answers that must be refused are refused.
-for problem in execute(root, process.request("ansible-playbook", ["-i", "localhost,", "-c", "local", "tests/playbooks/subid.yml"]), "subid plan proof") {
+for problem in execute_last(root, process.request("ansible-playbook", ["-i", "localhost,", "-c", "local", "tests/playbooks/subid.yml"]), "subid plan proof") {
     failures.append(problem)
 }
 # The Quadlet decisions are proven the same way: no root, no Podman, only the
 # role's own tasks and the files it writes.
-for problem in execute(root, process.request("ansible-playbook", ["-i", "localhost,", "-c", "local", "tests/playbooks/quadlet.yml"]), "quadlet decision proof") {
+for problem in execute_last(root, process.request("ansible-playbook", ["-i", "localhost,", "-c", "local", "tests/playbooks/quadlet.yml"]), "quadlet decision proof") {
     failures.append(problem)
 }
 for problem in check_archive(root) {
