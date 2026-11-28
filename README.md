@@ -59,8 +59,12 @@ It is shipped as the collection `benmoussa.container`.
   `short-name-mode = "enforcing"` refuses an ambiguous short name outside a
   terminal. A declared `.container` or `.image` names its image by digest
   (`@sha256:` with the 64 hex characters), or a `.container` references a
-  `.image` unit by name (`base.image`, whose own `Image=` is checked);
-  `image_digest: false` is the per-unit opt-out.
+  `.image` unit by name (`base.image`): the reference must resolve to a declared
+  `type: image` unit, whose own `Image=` is checked, or to a `<stem>.image` file
+  the site wrote in the generator directory. `image_digest: false` is the
+  per-unit opt-out; a bare name ending in `.image` is always a unit reference,
+  and a registry repository ending in `.image` needs an explicit `:tag` or
+  `@sha256:`.
 - **An edition it reads, never writes**: `container_host_edition` names the
   edition the host already carries (`server` today). Applying the engine role
   without it, or with another value, fails the run instead of guessing.
@@ -71,8 +75,10 @@ It is shipped as the collection `benmoussa.container`.
   the sandbox asserts that a declared drop-in is merged into it.
 - **A hardening baseline in one drop-in**: `container.d/*.conf` is merged into
   every container unit of the account — no new privileges, all capabilities
-  dropped, read-only rootfs with tmpfs, an init, pids and ulimit bounds,
-  journald logs. A unit's own drop-in still wins.
+  dropped (`AddCapability` may re-add one named in
+  `quadlet_permitted_capabilities`, `CAP_NET_BIND_SERVICE` by default), a
+  read-only rootfs with tmpfs, an init, pids and ulimit bounds, journald logs.
+  A unit's own drop-in still wins.
 - **A refusal, not a warning**: a declared unit that carries `Network=host`,
   `User=0`, `NoNewPrivileges=false`, `ReadOnly=false` or
   `SecurityLabelDisable=true` fails the run while the hardened defaults are on.
@@ -225,19 +231,31 @@ drop-in; emptying a default removes it everywhere.
 ## The base image
 
 `images/base/Containerfile` is the image the site's containers start from: the
-Debian minimal base pinned by digest, TLS roots, `tzdata`, `curl` for
-healthchecks, `procps`, the Scripts interpreter (release 0.3.0, verified against
-the release's `SHA256SUMS`), one non-root account (`app`, UID 1000), a locked
-root, no setuid bit and no package list. It writes nothing outside a tmpfs,
-which is what makes the read-only defaults of the Quadlet role usable.
+Debian minimal base pinned by digest and by the `snapshot.debian.org` archive of
+its own build date, TLS roots, `tzdata`, `curl` for healthchecks, `procps`, the
+Scripts interpreter (release 0.3.0, verified against the release's
+`SHA256SUMS`), one non-root account (`app`, UID 1000), a locked root, no setuid
+bit and no package list. It writes nothing outside a tmpfs, which is what makes
+the read-only defaults of the Quadlet role usable.
+
+The build is reproducible: the snapshot pin, the removal of the volatile
+apt/dpkg logs and `--timestamp` make two `--no-cache` builds of one commit
+produce the same digest (measured on podman 5.4.2). The image carries
+`/usr/share/build-manifest.txt` (the `dpkg-query` package set and its sha256) as
+its package record; a CycloneDX SBOM is a local owner artifact
+(`buildah build --sbom syft`, which pulls the scanner), never built in CI. The
+gate checks the FROM↔label digest, the snapshot pin, the manifest and the
+`images/base/REFRESHED` date; refresh the digest, the snapshot timestamp and
+that date together, at most 30 days apart.
 
 ```sh
 podman build \
+  --timestamp 1795392000 \
   --build-arg VERSION="$(cat VERSION)" \
   --build-arg REVISION="$(git rev-parse HEAD)" \
-  --build-arg CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --build-arg CREATED="2026-11-23T00:00:00Z" \
   -t localhost/benmoussa/container:test images/base
-podman run --rm localhost/benmoussa/container:test sh -c 'id; cat /etc/os-release'
+podman run --rm localhost/benmoussa/container:test sh -c 'id; cat /etc/os-release; head -1 /usr/share/build-manifest.sha256'
 ```
 
 The image is not built by the roles: the product ships the `Containerfile`, the

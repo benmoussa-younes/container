@@ -1581,6 +1581,329 @@
         that:
           - quadlet_image_reference.stat.exists
 
+- name: A capability outside the permitted list is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/capability"
+    quadlet_hardened_defaults: true
+    quadlet_units:
+      - name: adminextra
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          AddCapability=CAP_NET_BIND_SERVICE CAP_SYS_ADMIN
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The unpermitted capability fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: an unpermitted capability was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the capability, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'CAP_SYS_ADMIN' in quadlet_refusal"
+          - "'CAP_NET_BIND_SERVICE' not in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A drop-in cannot re-add an unpermitted capability
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/capability-dropin"
+    quadlet_hardened_defaults: true
+    quadlet_units:
+      - name: admindropin
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+
+          [Install]
+          WantedBy=default.target
+        dropins:
+          - name: 50-caps.conf
+            content: |
+              [Container]
+              AddCapability=CAP_SYS_ADMIN
+  tasks:
+    - name: The drop-in capability fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a drop-in re-added an unpermitted capability"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the drop-in capability, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'CAP_SYS_ADMIN' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: The permitted capability is accepted
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/capability-allowed"
+    quadlet_hardened_defaults: true
+    quadlet_units:
+      - name: bindservice
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+          AddCapability=CAP_NET_BIND_SERVICE
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The declarations are applied
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+
+    - name: The permitted capability is written
+      ansible.builtin.stat:
+        path: "{{ quadlet_proof }}/capability-allowed/bindservice.container"
+      register: quadlet_capability_allowed
+
+    - name: The named relaxation is accepted
+      ansible.builtin.assert:
+        that:
+          - quadlet_capability_allowed.stat.exists
+
+- name: An undeclared .image reference is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/image-undeclared"
+    quadlet_units:
+      - name: dangling
+        type: container
+        content: |
+          [Container]
+          Image=base.image
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The undeclared reference fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: an undeclared .image reference was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the reference, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'base.image' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A registry path ending in .image is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/image-path"
+    quadlet_units:
+      - name: registrypath
+        type: container
+        content: |
+          [Container]
+          Image=ghcr.io/acme/app.image
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The path-shaped reference fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a path-shaped .image reference was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the path, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'ghcr.io/acme/app.image' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A hand-written .image file satisfies the reference
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/image-file"
+    quadlet_units:
+      - name: manualref
+        type: container
+        content: |
+          [Container]
+          Image=hand.image
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The generator directory exists
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}"
+        state: directory
+        mode: "0755"
+
+    - name: The site writes its own .image unit
+      ansible.builtin.copy:
+        content: |
+          [Image]
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+        dest: "{{ quadlet_directory }}/hand.image"
+        mode: "0600"
+
+    - name: The declarations are applied
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+
+    - name: The referencing unit is written
+      ansible.builtin.stat:
+        path: "{{ quadlet_proof }}/image-file/manualref.container"
+      register: quadlet_manual_reference
+
+    - name: A hand-written .image file is accepted
+      ansible.builtin.assert:
+        that:
+          - quadlet_manual_reference.stat.exists
+
+- name: An .image reference to a withdrawn image unit is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/image-withdrawn"
+    quadlet_units:
+      - name: gonebase
+        type: image
+        state: absent
+      - name: dangling
+        type: container
+        content: |
+          [Container]
+          Image=gonebase.image
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The withdrawn image reference fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a reference to a withdrawn image unit was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the withdrawn reference, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'gonebase.image' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
 - name: The run's proof root is removed
   hosts: localhost
   connection: local

@@ -34,7 +34,11 @@ playbooks' syntax. It does not change tracked files.
 The base image is not built by the gate:
 
 ```sh
-podman build -t localhost/benmoussa/container:test images/base
+podman build --timestamp 1795392000 \
+  --build-arg VERSION="$(cat VERSION)" \
+  --build-arg REVISION="$(git rev-parse HEAD)" \
+  --build-arg CREATED="2026-11-23T00:00:00Z" \
+  -t localhost/benmoussa/container:test images/base
 ```
 
 ## Conventions

@@ -368,6 +368,66 @@ function check_base_image(root: path) -> list<string> {
     for problem in note(readme.contains("--build-arg VERSION"), "base build command passes the version", "README.md: the documented build does not pass VERSION") {
         result.append(problem)
     }
+    # The FROM digest and the label that names it must be the same digest, or
+    # the image claims a base it was not built from.
+    let mutable from_digest = ""
+    let mutable label_digest = ""
+    for line in image.lines() {
+        if line.starts_with("FROM ") {
+            from_digest = line.capture_groups(r"sha256:[0-9a-f]{64}").value_or([]).get_at_index(0).value_or("")
+        }
+        if line.contains("org.opencontainers.image.base.digest=") {
+            label_digest = line.capture_groups(r"sha256:[0-9a-f]{64}").value_or([]).get_at_index(0).value_or("")
+        }
+    }
+    for problem in note(from_digest.length() > 0 and from_digest == label_digest, "base digest matches its label", "images/base/Containerfile: FROM={from_digest} label={label_digest}") {
+        result.append(problem)
+    }
+    # Reproducibility is the snapshot pin plus the fixed timestamp; the four
+    # volatile files are purged, and the package set is archived in the image.
+    for problem in note(image.contains("snapshot.debian.org/archive/debian/") and image.contains("snapshot.debian.org/archive/debian-security/"), "base pinned to a snapshot", "images/base/Containerfile: apt is not pinned to snapshot.debian.org") {
+        result.append(problem)
+    }
+    for problem in note(image.contains("Check-Valid-Until=false"), "snapshot validity flag", "images/base/Containerfile: the snapshot security suite needs Acquire::Check-Valid-Until=false") {
+        result.append(problem)
+    }
+    for problem in note(image.contains("build-manifest.txt") and image.contains("build-manifest.sha256"), "base package manifest", "images/base/Containerfile: the package manifest is missing") {
+        result.append(problem)
+    }
+    let refreshed = read_text(root, "images/base/REFRESHED").trim_whitespace()
+    for problem in note(refreshed.matches(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$").value_or(false), "base refresh date", "images/base/REFRESHED is not an ISO date: `{refreshed}`") {
+        result.append(problem)
+    }
+    # The digest is a month-scale dependency: a hard 30-day bound forces the
+    # refresh instead of letting the base drift. Move the constant, not the date,
+    # if the cadence changes.
+    let mutable age_ok = false
+    match process.run(process.request("date", ["-u", "-d", refreshed, "+%s"])) {
+        ok(refreshed_run) => {
+            if refreshed_run.exit_code == 0 {
+                match refreshed_run.standard_output.trim_whitespace().parse_integer() {
+                    ok(refreshed_stamp) => {
+                        match process.run(process.request("date", ["-u", "+%s"])) {
+                            ok(now_run) => {
+                                match now_run.standard_output.trim_whitespace().parse_integer() {
+                                    ok(now_value) => {
+                                        age_ok = now_value >= refreshed_stamp and now_value - refreshed_stamp <= 30 * 86400
+                                    }
+                                    error(_failure) => {}
+                                }
+                            }
+                            error(_failure) => {}
+                        }
+                    }
+                    error(_failure) => {}
+                }
+            }
+        }
+        error(_failure) => {}
+    }
+    for problem in note(age_ok, "base refreshed within 30 days", "images/base/REFRESHED is `{refreshed}`: refresh the FROM digest, the snapshot timestamp and this date") {
+        result.append(problem)
+    }
     return result
 }
 
