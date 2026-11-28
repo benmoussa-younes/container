@@ -11,8 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `account`: the collection creates the login account the rootless engine runs
   as, so a host needs no pre-existing human. The defaults are `container` with
-  uid/gid 1500, home `/home/container` and `/bin/bash`; the name, UID, GID, home
-  and shell are inventory values. The role refuses to rewrite an existing
+  uid/gid 1500, the distribution's home for that name and `/bin/bash`; the name,
+  UID, GID, home and shell are inventory values. The role refuses to rewrite an existing
   identity (an account or a group that already holds another UID or GID fails
   the run), reads the account back, and checks that the home belongs to it.
   `playbooks/site.yml` runs it first, when the engine or the declarations are

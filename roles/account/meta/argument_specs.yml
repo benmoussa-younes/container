@@ -41,7 +41,8 @@ argument_specs:
         type: str
         required: false
         description:
-          - The home directory. Defaults to C(/home/<account_name>).
+          - The home directory. When omitted, the distribution's default for
+            the account name, read back from the host.
       account_shell:
         type: str
         required: false

@@ -13,20 +13,21 @@
         database: passwd
         key: "{{ account_name }}"
 
+    - name: The account's passwd entry is kept
+      ansible.builtin.set_fact:
+        account_sandbox_passwd: "{{ ansible_facts.getent_passwd[account_name] }}"
+
     - name: The account carries the declared identity
       ansible.builtin.assert:
         that:
-          - account_passwd[1] == account_uid | string
-          - account_passwd[2] == account_gid | string
-          - account_passwd[4] == account_home
-          - account_passwd[5] == account_shell
-        fail_msg: "{{ account_passwd }}"
-      vars:
-        account_passwd: "{{ ansible_facts.getent_passwd[account_name] }}"
+          - account_sandbox_passwd[1] == account_uid | string
+          - account_sandbox_passwd[2] == account_gid | string
+          - account_sandbox_passwd[5] == account_shell
+        fail_msg: "{{ account_sandbox_passwd }}"
 
     - name: The home directory is read
       ansible.builtin.stat:
-        path: "{{ account_home }}"
+        path: "{{ account_sandbox_passwd[4] }}"
       register: account_sandbox_home
 
     - name: The home directory belongs to the account

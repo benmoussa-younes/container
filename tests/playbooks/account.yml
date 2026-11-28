@@ -313,7 +313,6 @@
         account_name: ctr-proof
         account_uid: "{{ account_proof_uid }}"
         account_gid: "{{ account_proof_gid }}"
-        account_home: /home/ctr-proof
         account_shell: /bin/sh
 
     - name: The host does not hold the accepted identity

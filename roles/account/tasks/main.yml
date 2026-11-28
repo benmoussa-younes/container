@@ -16,7 +16,7 @@
         name: "{{ account_name }}"
         uid: "{{ account_uid | int }}"
         group: "{{ account_name }}"
-        home: "{{ account_home }}"
+        home: "{{ account_home | default(omit, true) }}"
         shell: "{{ account_shell }}"
         comment: "{{ account_comment }}"
         create_home: "{{ account_create_home | bool }}"
@@ -37,7 +37,7 @@
         that:
           - account_passwd[1] == account_uid | string
           - account_passwd[2] == account_gid | string
-          - account_passwd[4] == account_home
+          - account_home | default('') | length == 0 or account_passwd[4] == account_home
           - account_passwd[5] == account_shell
           - account_group[1] == account_gid | string
         fail_msg: >-
@@ -52,7 +52,7 @@
 
     - name: The home directory is read
       ansible.builtin.stat:
-        path: "{{ account_home }}"
+        path: "{{ account_home | default(account_passwd[4], true) }}"
       register: account_home_stat
       when: account_create_home | bool
 
