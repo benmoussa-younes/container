@@ -6,15 +6,22 @@ import "../modules/repo.scs" as repo
 let root: path = repo.root_path_from(process.script_path())
 let inventory = "tests/inventories/sandbox/hosts.yml"
 
-function first_lines(text: string, limit: integer) -> string {
-    let mutable kept: list<string> = []
+function tail_lines(text: string, limit: integer) -> string {
+    let mutable all: list<string> = []
     for line in text.lines() {
-        if kept.length() >= limit {
-            break
-        }
         if line.trim_whitespace().length() > 0 {
-            kept.append(line)
+            all.append(line)
         }
+    }
+    let mutable start = 0
+    if all.length() > limit {
+        start = all.length() - limit
+    }
+    let mutable kept: list<string> = []
+    let mutable index = start
+    while index < all.length() {
+        kept.append(all.get_at_index(index).value_or(""))
+        index = index + 1
     }
     return kept.join("\n")
 }
@@ -50,7 +57,7 @@ function playbook(root: path, arguments: list<string>, label: string) -> map<str
             }
             if completed.exit_code != 0 {
                 io.write_standard_error_line("{label}: exit {completed.exit_code}")
-                io.write_standard_error_line(first_lines(completed.standard_error + "\n" + completed.standard_output, 10))
+                io.write_standard_error_line(tail_lines(completed.standard_error + "\n" + completed.standard_output, 10))
             }
         }
         error(failure) => {
