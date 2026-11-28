@@ -158,8 +158,10 @@ then removes **this account's** unusable ranges and adds the block the plan
 names (`usermod --del-subuids`/`--add-subuids`), runs `podman system migrate` as
 the account so its pause process adopts the mapping, then asserts that
 `/proc/self/uid_map` and `/proc/self/gid_map` contain the block. It never
-touches another account's line. `podman_subid_nsswitch_file` is read too: a host that puts `subid: sss` in
-`/etc/nsswitch.conf` is refused, because the plan reads the files.
+touches another account's line. `podman_subid_nsswitch_file` is read too. A host that delegates `subid:` to an
+NSS provider, or whose `passwd:`/`group:` list anything but `files` and
+`systemd`, is refused: the plan reads the files, and `systemd` only fills the
+dynamic range (61184-65519), which no subordinate block can contain.
 
 `--check` does not report the identifiers: `usermod` and `podman system migrate`
 are commands, so a dry run prints `changed=0` even when a real run would rewrite

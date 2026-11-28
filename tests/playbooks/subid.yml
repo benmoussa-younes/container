@@ -268,3 +268,71 @@
         that:
           - "'1 100000 65536' in podman_normalised"
           - podman_kernel_map not in podman_normalised
+
+# The account files are read the same way as the subordinate ones: a host whose
+# accounts come from an identity server is refused too, and `systemd` (the
+# dynamic range Debian fills by default) is not a delegation.
+- name: A host that delegates its accounts is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    podman_user: alice
+    podman_subuid_start: 100000
+    podman_subuid_count: 65536
+    podman_subuid_repair: true
+    podman_subid_passwd_file: "{{ playbook_dir }}/../fixtures/subid/passwd"
+    podman_subid_group_file: "{{ playbook_dir }}/../fixtures/subid/group"
+    podman_subid_nsswitch_file: "{{ playbook_dir }}/../fixtures/subid/nsswitch-sss-accounts.conf"
+    podman_subuid_file: "{{ playbook_dir }}/../fixtures/subid/ok.subuid"
+    podman_subgid_file: "{{ playbook_dir }}/../fixtures/subid/ok.subgid"
+  tasks:
+    - name: The plan of a host with a remote account source fails the run
+      block:
+        - name: The plan is computed
+          ansible.builtin.include_role:
+            name: podman
+            tasks_from: subuid-plan.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: the plan accepted a host whose accounts come from an NSS provider"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            podman_subid_accounts_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the account source, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in podman_subid_accounts_refusal"
+          - "'passwd: files sss' in podman_subid_accounts_refusal"
+        fail_msg: "{{ podman_subid_accounts_refusal | default('the include did not fail') }}"
+
+- name: The systemd dynamic range is not a delegation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    podman_user: alice
+    podman_subuid_start: 100000
+    podman_subuid_count: 65536
+    podman_subuid_repair: false
+    podman_subid_passwd_file: "{{ playbook_dir }}/../fixtures/subid/passwd"
+    podman_subid_group_file: "{{ playbook_dir }}/../fixtures/subid/group"
+    podman_subid_nsswitch_file: "{{ playbook_dir }}/../fixtures/subid/nsswitch-systemd.conf"
+    podman_subuid_file: "{{ playbook_dir }}/../fixtures/subid/ok.subuid"
+    podman_subgid_file: "{{ playbook_dir }}/../fixtures/subid/ok.subgid"
+  tasks:
+    - name: The plan is computed
+      ansible.builtin.include_role:
+        name: podman
+        tasks_from: subuid-plan.yml
+
+    - name: The plan is accepted
+      ansible.builtin.assert:
+        that:
+          - podman_subid_status == 'OK 100000 65536'

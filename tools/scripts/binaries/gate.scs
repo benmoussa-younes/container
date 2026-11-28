@@ -309,6 +309,8 @@ function check_subid_plan(root: path) -> list<string> {
         "own uid in block|empty|100000|65536|alice|passwd-self|group-self|ADD 165536 65536\nPLAN 165536 65536",
         "count at maximum|empty|100000|1048576|alice|passwd|group|ADD 100000 1048576\nPLAN 100000 1048576",
         "count past maximum|empty|100000|1048577|alice|passwd|group|BADARG count",
+        "base past 2^32|empty|4294901760|65536|alice|passwd|group|BADARG base",
+        "name with a separator|ok|100000|65536|alice:bob|passwd|group|BADARG name",
         "base 0|badarg-base|0|65536|alice|passwd|group|BADARG base",
         "count 0|empty|100000|0|alice|passwd|group|BADARG count",
         "count too big|empty|100000|4000000000|alice|passwd|group|BADARG count"

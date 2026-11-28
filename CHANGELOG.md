@@ -16,7 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it adds the first free block at or after `podman_subuid_start` when the account
   has none, and it never overwrites. A candidate must also avoid every UID and
   GID that `/etc/passwd` and `/etc/group` declare, and the count is capped at
-  1 048 576.
+  1 048 576. A host whose accounts or subordinate ranges come from an NSS
+  provider is refused, because the plan reads the files.
 - `podman`: `podman_subuid_repair` (false by default) is the one repair the role
   accepts: it removes this account's unusable ranges, then adds the block the
   plan names.

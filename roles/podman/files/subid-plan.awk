@@ -69,7 +69,7 @@ function target_ranges(file, start, count,   i, n) {
 # can be free, so the search is proportional to the number of ranges and never
 # walks a billion single-UID candidates. Sets chosen_start, returns 1, or returns
 # 0 when the aligned blocks would pass 2^32.
-function free_block(   k, s, e, i, jump, blocked) {
+function free_block(   k, s, e, i, jump, blocked, after) {
     k = 0
     while (1) {
         s = base + k * size
@@ -88,9 +88,13 @@ function free_block(   k, s, e, i, jump, blocked) {
             }
             if (overlap(s, e, r_start[i], r_start[i] + r_count[i])) {
                 blocked = 1
-                jump = int((r_start[i] + r_count[i] - base + size - 1) / size)
-                if (jump <= k) {
-                    jump = k + 1
+                # The farthest end among the ranges this candidate overlaps:
+                # keeping the last one seen instead would send the search
+                # backwards and rescan, which measured as quadratic (12 000
+                # ranges took 100 s).
+                after = int((r_start[i] + r_count[i] - base + size - 1) / size)
+                if (after > jump) {
+                    jump = after
                 }
             }
         }
