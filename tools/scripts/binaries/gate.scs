@@ -119,6 +119,15 @@ function tracked_files(root: path) -> list<string> {
     }
 }
 
+function any_prefix(text: string, prefixes: list<string>) -> boolean {
+    for prefix in prefixes {
+        if text.starts_with(prefix) {
+            return true
+        }
+    }
+    return false
+}
+
 function any_starts(entries: list<string>, prefix: string) -> boolean {
     for entry in entries {
         if entry.starts_with(prefix) {
@@ -408,6 +417,41 @@ function check_subid_wiring(root: path) -> list<string> {
     return result
 }
 
+# Every `.scs` under `tools/` carries a shebang `ansible-test` does not know, and
+# each `tests/sanity/ignore-<version>.txt` must name it: the files are per
+# `ansible-core` version, so the check walks whatever is tracked instead of a
+# hard-coded list. This is the defect that failed the CI of PR #10 while the gate
+# was green.
+function check_sanity_ignores(root: path) -> list<string> {
+    let mutable scripts: list<string> = []
+    let mutable ignores: list<string> = []
+    for file in tracked_files(root) {
+        if file.starts_with("tools/") and file.ends_with(".scs") {
+            scripts.append(file)
+        }
+        if file.starts_with("tests/sanity/ignore-") and file.ends_with(".txt") {
+            ignores.append(file)
+        }
+    }
+    let mutable result: list<string> = []
+    for ignore in ignores {
+        let text = read_text(root, ignore)
+        let mutable missing: list<string> = []
+        for script in scripts {
+            if not text.contains(script + " shebang") {
+                missing.append(script)
+            }
+        }
+        for problem in note(missing.length() == 0, "sanity ignore {ignore}", missing.join(", ")) {
+            result.append(problem)
+        }
+    }
+    for problem in note(ignores.length() > 0, "sanity ignore files present", "no tests/sanity/ignore-*.txt is tracked") {
+        result.append(problem)
+    }
+    return result
+}
+
 function check_paths(root: path) -> list<string> {
     let files = tracked_files(root)
     let mutable result: list<string> = []
@@ -457,6 +501,7 @@ function check_required(root: path) -> list<string> {
         "roles/quadlet/meta/argument_specs.yml",
         "inventories/example/hosts.yml",
         "tests/playbooks/subid.yml",
+        "tests/playbooks/podman.yml",
         "tests/playbooks/quadlet.yml",
         "tests/playbooks/verify-sandbox.yml",
         "tests/inventories/sandbox/hosts.yml",
@@ -631,29 +676,36 @@ function check_archive(root: path) -> list<string> {
                                             missing.append(entry)
                                         }
                                     }
-                                    let forbidden = [
-                                        "docs/",
-                                        "ci/",
-                                        "bench/",
-                                        "runs/",
-                                        ".github/",
-                                        "tools/",
-                                        ".opencode/",
-                                        "inventories/",
-                                        "AGENTS.md",
-                                        "CONTRIBUTING.md",
-                                        "SECURITY.md"
+                                    # What the collection is, measured from the archive it
+                                    # builds. Every other tracked path must be excluded by
+                                    # `build_ignore`: the check keys on this list, never on
+                                    # `build_ignore` itself, so a pattern that drifts (a typo,
+                                    # a deleted line) ships a path that is named here.
+                                    let shipped = [
+                                        "roles/",
+                                        "playbooks/",
+                                        "meta/",
+                                        "images/",
+                                        "LICENSES/",
+                                        "README.md",
+                                        "CHANGELOG.md",
+                                        "VERSION",
+                                        "LICENSE",
+                                        "NOTICE",
+                                        "REUSE.toml",
+                                        "MANIFEST.json",
+                                        "FILES.json"
                                     ]
                                     let mutable present: list<string> = []
-                                    for entry in forbidden {
-                                        if any_starts(entries, entry) {
+                                    for entry in entries {
+                                        if not any_prefix(entry, shipped) {
                                             present.append(entry)
                                         }
                                     }
                                     for problem in note(missing.length() == 0, "archive content", missing.join(", ")) {
                                         result.append(problem)
                                     }
-                                    for problem in note(present.length() == 0, "archive exclusion", present.join(", ")) {
+                                    for problem in note(present.length() == 0, "archive carries only the collection", present.join(", ")) {
                                         result.append(problem)
                                     }
                                 }
@@ -690,6 +742,9 @@ function check_archive(root: path) -> list<string> {
 
 let mutable failures: list<string> = []
 for problem in check_paths(root) {
+    failures.append(problem)
+}
+for problem in check_sanity_ignores(root) {
     failures.append(problem)
 }
 for problem in check_required(root) {
@@ -736,6 +791,11 @@ for playbook in ["playbooks/site.yml", "tests/playbooks/subid.yml", "tests/playb
 # The plan is proven, not grepped: the fixtures run the role's own tasks and the
 # two answers that must be refused are refused.
 for problem in execute_last(root, process.request("ansible-playbook", ["-i", "localhost,", "-c", "local", "tests/playbooks/subid.yml"]), "subid plan proof") {
+    failures.append(problem)
+}
+# The engine's defaults are rendered from the role's own defaults file; a deleted
+# line in a template fails here, and nothing else reads those templates.
+for problem in execute_last(root, process.request("ansible-playbook", ["-i", "localhost,", "-c", "local", "tests/playbooks/podman.yml"]), "engine defaults proof") {
     failures.append(problem)
 }
 # The Quadlet decisions are proven the same way: no root, no Podman, only the
