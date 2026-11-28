@@ -491,6 +491,7 @@ function check_required(root: path) -> list<string> {
     let required = [
         "VERSION",
         "galaxy.yml",
+        "requirements-dev.txt",
         "meta/runtime.yml",
         "README.md",
         "CHANGELOG.md",

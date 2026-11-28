@@ -19,10 +19,11 @@ tags:
   - quadlet
   - rootless
   - systemd
+  - debian
+  - ansible
 dependencies: {}
 homepage: https://github.com/benmoussa-younes/container
 repository: https://github.com/benmoussa-younes/container
-issues: https://github.com/benmoussa-younes/container/issues
 documentation: https://github.com/benmoussa-younes/container#readme
 build_ignore:
   - .git
@@ -60,6 +61,7 @@ build_ignore:
   - .yamllint
   - .ansible-lint
   - ansible.cfg
+  - requirements-dev.txt
   - requirements.yml
   - "*.tar.gz"
   - "*.retry"
