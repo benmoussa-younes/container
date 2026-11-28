@@ -119,6 +119,15 @@ function tracked_files(root: path) -> list<string> {
     }
 }
 
+function any_prefix(text: string, prefixes: list<string>) -> boolean {
+    for prefix in prefixes {
+        if text.starts_with(prefix) {
+            return true
+        }
+    }
+    return false
+}
+
 function any_starts(entries: list<string>, prefix: string) -> boolean {
     for entry in entries {
         if entry.starts_with(prefix) {
@@ -667,29 +676,36 @@ function check_archive(root: path) -> list<string> {
                                             missing.append(entry)
                                         }
                                     }
-                                    let forbidden = [
-                                        "docs/",
-                                        "ci/",
-                                        "bench/",
-                                        "runs/",
-                                        ".github/",
-                                        "tools/",
-                                        ".opencode/",
-                                        "inventories/",
-                                        "AGENTS.md",
-                                        "CONTRIBUTING.md",
-                                        "SECURITY.md"
+                                    # What the collection is, measured from the archive it
+                                    # builds. Every other tracked path must be excluded by
+                                    # `build_ignore`: the check keys on this list, never on
+                                    # `build_ignore` itself, so a pattern that drifts (a typo,
+                                    # a deleted line) ships a path that is named here.
+                                    let shipped = [
+                                        "roles/",
+                                        "playbooks/",
+                                        "meta/",
+                                        "images/",
+                                        "LICENSES/",
+                                        "README.md",
+                                        "CHANGELOG.md",
+                                        "VERSION",
+                                        "LICENSE",
+                                        "NOTICE",
+                                        "REUSE.toml",
+                                        "MANIFEST.json",
+                                        "FILES.json"
                                     ]
                                     let mutable present: list<string> = []
-                                    for entry in forbidden {
-                                        if any_starts(entries, entry) {
+                                    for entry in entries {
+                                        if not any_prefix(entry, shipped) {
                                             present.append(entry)
                                         }
                                     }
                                     for problem in note(missing.length() == 0, "archive content", missing.join(", ")) {
                                         result.append(problem)
                                     }
-                                    for problem in note(present.length() == 0, "archive exclusion", present.join(", ")) {
+                                    for problem in note(present.length() == 0, "archive carries only the collection", present.join(", ")) {
                                         result.append(problem)
                                     }
                                 }
