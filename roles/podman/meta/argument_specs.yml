@@ -78,8 +78,9 @@ argument_specs:
         type: int
         required: false
         description: >-
-          The maximum size of a container log in bytes. Negative means no limit,
-          which is the `containers.conf` default.
+          The maximum size of a file-container log in bytes. Negative means no
+          limit, which is the `containers.conf` default. The journald driver,
+          which the product's units use, keeps the journal's own retention.
       podman_umask:
         type: str
         required: false

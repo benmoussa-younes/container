@@ -50,13 +50,6 @@ podman_stale_config_files:
   - "{{ podman_registries_dir }}/99-podman.conf"
   - "{{ podman_containers_dir }}/99-podman.conf"
 
-# The engine's own defaults, closer to the product than Debian's.
-#
-# `no_new_privileges` is false in `containers.conf`, `log_size_max` is -1
-# (unbounded) and `pids_limit` is 2048 (Debian's `/usr/share/containers/
-# containers.conf`): a single container can then spawn a fork bomb no one bounds
-# and fill the disk with its log. The product bounds all three for every
-# container, unit or not. `umask` is the container's file mode.
 podman_no_new_privileges: true
 podman_pids_limit: 512
 podman_log_size_max: 10485760

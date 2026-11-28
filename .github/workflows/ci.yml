@@ -64,12 +64,12 @@ jobs:
 
       - name: Check the repository scripts
         run: |
-          scripts check --deny-warnings tools/scripts/binaries/gate.scs
-          scripts check --deny-warnings tools/scripts/binaries/release.scs
-          scripts check --deny-warnings tools/scripts/binaries/verify-release.scs
-          scripts check --module --deny-warnings tools/scripts/modules/repo.scs
-          scripts check --module --deny-warnings tools/scripts/modules/secrets.scs
-          scripts check --module --deny-warnings tools/scripts/modules/verdict.scs
+          for script in tools/scripts/binaries/*.scs; do
+            scripts check --deny-warnings "$script"
+          done
+          for module in tools/scripts/modules/*.scs; do
+            scripts check --module --deny-warnings "$module"
+          done
 
       - name: Gate
         run: scripts run --no-warnings tools/scripts/binaries/gate.scs

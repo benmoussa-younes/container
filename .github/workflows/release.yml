@@ -121,6 +121,7 @@ jobs:
           path: |
             dist/*
             release-notes.md
+            VERSION
 
   release:
     needs: build
