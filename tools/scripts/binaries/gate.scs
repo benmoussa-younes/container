@@ -167,7 +167,7 @@ function git_search(root: path, arguments: list<string>, name: string) -> list<s
 }
 
 function git_grep(root: path, flags: list<string>, pattern: string, paths: list<string>) -> list<string> {
-    let mutable arguments = ["grep", "-In", "--untracked"]
+    let mutable arguments = ["grep", "-n", "--untracked"]
     for flag in flags {
         arguments.append(flag)
     }
@@ -464,6 +464,14 @@ function check_paths(root: path) -> list<string> {
             forbidden.append(file)
         }
         if file.starts_with(".opencode/") {
+            forbidden.append(file)
+        }
+        if file.starts_with(".ansible/") or file.starts_with("dist/") or file.starts_with("artifacts/") {
+            forbidden.append(file)
+        }
+        let credential_name = file.ends_with("/auth.json") or file == "auth.json"
+        let credential_suffix = file.ends_with(".pem") or file.ends_with(".key") or file.ends_with("/id_rsa") or file.ends_with(".env")
+        if credential_name or credential_suffix {
             forbidden.append(file)
         }
         if file.starts_with("inventories/") and not file.starts_with("inventories/example/") {
@@ -777,7 +785,12 @@ for problem in check_subid_wiring(root) {
 for problem in check_licences(root, false) {
     failures.append(problem)
 }
-for problem in git_search(root, ["grep", "--cached", "-IniE", "-e", secrets.joined(), "--", ".", ":(exclude)tools", ":(exclude)LICENSES"], "no secret shape") {
+function check_secret_shapes(root: path) -> list<string> {
+    let matches = git_grep(root, ["-i"], secrets.joined(), [".", ":(exclude)LICENSES", ":(exclude)tools/scripts/modules/secrets.scs"])
+    return note(matches.length() == 0, "no secret shape", matches.join(", "))
+}
+
+for problem in check_secret_shapes(root) {
     failures.append(problem)
 }
 for problem in execute(root, process.request("ansible-lint", ["playbooks", "roles", "tests"]), "ansible-lint") {
