@@ -12,9 +12,7 @@ podman_enabled: false
 # of `meta/argument_specs.yml` (`server` today), and an absent one fails the
 # role's first task with a message that says what to declare.
 
-# The account that owns the rootless engine. It defaults to the product's human
-# account; a site may name another existing account.
-podman_user: "{{ accounts_human.name | default('') }}"
+podman_user: "{{ account_name | default('container') }}"
 
 podman_packages:
   - podman

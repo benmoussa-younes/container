@@ -448,6 +448,10 @@ function check_required(root: path) -> list<string> {
         "LICENSES/AGPL-3.0-or-later.txt",
         "playbooks/site.yml",
         "roles/README.md",
+        "roles/account/defaults/main.yml",
+        "roles/account/meta/argument_specs.yml",
+        "roles/account/tasks/main.yml",
+        "roles/account/tasks/validate.yml",
         "roles/podman/tasks/main.yml",
         "roles/podman/tasks/subuid.yml",
         "roles/podman/tasks/subuid-plan.yml",
@@ -459,6 +463,7 @@ function check_required(root: path) -> list<string> {
         "tests/playbooks/subid.yml",
         "tests/playbooks/quadlet.yml",
         "tests/playbooks/verify-sandbox.yml",
+        "tests/playbooks/account.yml",
         "tests/inventories/sandbox/hosts.yml",
         "tools/scripts/binaries/gate.scs",
         "tools/scripts/binaries/verify-sandbox.scs",
@@ -741,6 +746,9 @@ for problem in execute_last(root, process.request("ansible-playbook", ["-i", "lo
 # The Quadlet decisions are proven the same way: no root, no Podman, only the
 # role's own tasks and the files it writes.
 for problem in execute_last(root, process.request("ansible-playbook", ["-i", "localhost,", "-c", "local", "tests/playbooks/quadlet.yml"]), "quadlet decision proof") {
+    failures.append(problem)
+}
+for problem in execute_last(root, process.request("ansible-playbook", ["-i", "localhost,", "-c", "local", "tests/playbooks/account.yml"]), "account decision proof") {
     failures.append(problem)
 }
 for problem in check_archive(root) {

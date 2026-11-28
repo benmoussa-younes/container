@@ -11,13 +11,19 @@ base; the definitions themselves — ports, volumes, networks, secrets — remai
 the site's.
 
 It installs on a host that already carries an edition — Server Edition or
-Workstation Edition — and it **owns no identity**: no `os-release` of its own,
-no login banner, no boot splash, no version line of its own. The edition says
-what the machine is; this collection says what it runs. It is shipped as the
-collection `benmoussa.container`.
+Workstation Edition — and it **writes no host identity**: no `os-release` of
+its own, no login banner, no boot splash, no version line of its own. The one
+account it creates is the engine's own, and the site declares its name, UID and
+GID. The edition says what the machine is; this collection says what it runs.
+It is shipped as the collection `benmoussa.container`.
 
 ## What it does
 
+- **The account it runs as**: the collection creates the login account the
+  engine runs as, so a host needs no pre-existing human. `container` with
+  uid/gid 1500 by default, and the name, the UID, the GID, the home and the
+  shell are the site's. It refuses to move an existing identity: an account
+  whose UID differs fails the run, it is never rewritten.
 - **One rootless engine**: packages, registry search path, the engine's
   drop-in, the user socket, linger and subordinate IDs. The rootful socket is
   never enabled and `/etc/containers/systemd` is never written.
@@ -61,8 +67,9 @@ collection `benmoussa.container`.
   today, with the engine packages taken from the distribution;
 - `ansible-core` **2.19 or later** on the controller, with SSH access to the
   target;
-- an existing human account that will own the rootless engine; the product
-  creates no account;
+- no pre-existing account: the collection creates the engine's own login
+  account (`container`, uid/gid 1500 by default), and the name, UID and GID
+  are inventory values;
 - a privilege-escalation password: no account of the product holds `NOPASSWD`;
 - the target's host key in the controller's `known_hosts`;
 - network access to the distribution mirror, both on the target and wherever
@@ -106,12 +113,19 @@ all:
     ansible_user: debian
     ansible_python_interpreter: /usr/bin/python3
 
-    # The engine. The account must already exist; `quadlet` follows it.
+    # The account the collection creates and the engine runs as. The defaults
+    # are `container` with uid/gid 1500; name, UID, GID, home and shell are
+    # yours to declare.
+    account_name: container
+    account_uid: 1500
+    account_gid: 1500
+
+    # The engine. `podman_user` follows `account_name`; name another account
+    # only when you turn `account_enabled` off and own that account yourself.
     # `container_host_edition` is the edition the host already carries: the
     # collection owns no identity and accepts `server` today.
     podman_enabled: true
     container_host_edition: server
-    podman_user: "{{ ansible_user }}"
     podman_registries: [docker.io]
 
     # The site's declarations. Nothing is created by this product.
@@ -203,12 +217,15 @@ inside keep their own licences (see `NOTICE`).
 
 | Role | Purpose | Status |
 |---|---|---|
-| `podman` | The rootless engine for one existing non-root account: packages, registry search path, engine drop-in with the product's defaults, user socket, linger and subordinate IDs. It creates no container and never enables the rootful socket. | implemented |
+| `account` | The login account the rootless engine runs as: the group, the account, its UID, GID, home and shell. The name, UID and GID are inventory values (`container`, 1500:1500 by default). It refuses to rewrite an existing identity and creates no subordinate ID, no linger and no engine configuration. | implemented |
+| `podman` | The rootless engine for the account `account` creates: packages, registry search path, engine drop-in with the product's defaults, user socket, linger and subordinate IDs. It creates no container and never enables the rootful socket. | implemented |
 | `quadlet` | The site's Quadlet declarations, the product's global hardening drop-in, the refusal of keys that relax it, a user-manager reload and a read-back of every generated unit. It creates no image, volume, network, pod or container. | implemented |
 
-`playbooks/site.yml` runs `podman` then `quadlet`, both opt-in with
-`podman_enabled` and `quadlet_enabled`. The declarations come second because a
-generated user unit needs the owning account, its linger and its engine first.
+`playbooks/site.yml` runs `account`, `podman` then `quadlet`, all opt-in with
+`account_enabled`, `podman_enabled` and `quadlet_enabled`. The account comes
+first because the engine's identifiers and linger target it; the declarations
+come last because a generated user unit needs the account, its linger and its
+engine.
 
 ### Quadlet declarations
 
@@ -275,7 +292,8 @@ defaults are on. Empty it deliberately if a site needs one.
 - It does not build an image: it ships the base `Containerfile`, and the site
   runs `podman build`. It does not pull, start or stop a container, a pod, a
   volume or a network.
-- It does not create or modify an account.
+- It does not set a password, a key or a privilege on the account it creates:
+  the password stays locked, and the site owns the keys and the `sudo` rule.
 - It does not store a secret, a registry credential or a site definition.
 - It does not manage a firewall port for a unit: the site that publishes a port
   declares it.

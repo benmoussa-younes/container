@@ -26,7 +26,10 @@ argument_specs:
       podman_user:
         type: str
         required: false
-        description: The existing account that owns the rootless engine. Never root.
+        description: >-
+          The account that owns the rootless engine. It defaults to the name
+          `roles/account` declares (`account_name`, `container` by default).
+          Never root.
       podman_packages:
         type: list
         elements: str
