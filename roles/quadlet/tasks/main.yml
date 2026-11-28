@@ -59,6 +59,46 @@
       loop_control:
         label: "{{ item.name | default('?') }}"
 
+    - name: The declarations are keyed once
+      ansible.builtin.set_fact:
+        quadlet_declared: >-
+          {{ quadlet_units | map(attribute='name')
+             | zip(quadlet_units | map(attribute='type'))
+             | map('join', '.') | list }}
+
+    - name: Every declaration is unique
+      ansible.builtin.assert:
+        that:
+          - quadlet_declared | unique | list | length == quadlet_declared | length
+        fail_msg: >-
+          Two declarations share a name and a type, and the second overwrites
+          the first: declared {{ quadlet_declared | join(', ') }}. Give one of
+          them another name.
+        quiet: true
+
+    # Quadlet applies `[Install]` at generation and starts nothing at boot
+    # without it, so a container unit that never says how it starts is a unit
+    # that never comes back after a reboot. `boot: false` is the explicit
+    # opt-out for a unit another one starts.
+    - name: Every container or kube unit can start at boot, or says it must not
+      ansible.builtin.assert:
+        that:
+          - (item.content is search('(?m)^[ \t]*\[Install\][ \t]*$')
+             and (item.content is search('(?mi)^[ \t]*WantedBy[ \t]*=')
+                  or item.content is search('(?mi)^[ \t]*RequiredBy[ \t]*=')))
+        fail_msg: >-
+          `{{ item.name }}` declares no `[Install]` section, so Quadlet generates
+          the unit and it never starts at boot. Add `WantedBy=default.target`, or
+          declare `boot: false` for a unit another one starts.
+        quiet: true
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - (item.type | default('')) in ['container', 'kube']
+        - (item.state | default('present')) == 'present'
+        - item.boot | default(true) | bool
+
     - name: The generator directory exists
       ansible.builtin.file:
         path: "{{ quadlet_directory }}"
@@ -86,11 +126,29 @@
       when: quadlet_hardened_defaults | bool
       notify: Reload the user manager
 
+    - name: The product's hardening drop-in is withdrawn when the switch is off
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}/container.d/10-container-edition.conf"
+        state: absent
+      when: not (quadlet_hardened_defaults | bool)
+      notify: Reload the user manager
+
+    - name: The read-back has a manager to read
+      ansible.builtin.assert:
+        that:
+          - not (quadlet_verify | bool) or (quadlet_reload | bool)
+        fail_msg: >-
+          quadlet_verify requires quadlet_reload: a generated unit exists only
+          after the account's user manager reloads, so the read-back would fail
+          on a unit that was written correctly.
+        quiet: true
+
     - name: The forbidden declarations are compiled once
       ansible.builtin.set_fact:
         quadlet_forbidden_pattern: >-
           {{ '(?m)^[ \t]*('
-             ~ (quadlet_forbidden | map('regex_escape') | join('|'))
+             ~ (quadlet_forbidden | map('regex_escape')
+                | map('regex_replace', '=', '[ \t]*=[ \t]*') | join('|'))
              ~ ')[ \t]*$' }}
       when:
         - quadlet_hardened_defaults | bool
@@ -154,7 +212,7 @@
         - (item.0.type | default('')) == 'container'
         - (item.0.state | default('present')) == 'present'
         - item.1.value | length > 0
-        - (item.0.content | default('')) is not search('(?m)^' ~ (item.1.key | regex_escape) ~ '=')
+        - (item.0.content | default('')) is not search('(?m)^[ \t]*' ~ (item.1.key | regex_escape) ~ '[ \t]*=')
 
     - name: The default bounds are written where the unit declares none
       ansible.builtin.copy:
@@ -175,7 +233,7 @@
         - (item.0.type | default('')) == 'container'
         - (item.0.state | default('present')) == 'present'
         - item.1.value | length > 0
-        - (item.0.content | default('')) is not search('(?m)^' ~ (item.1.key | regex_escape) ~ '=')
+        - (item.0.content | default('')) is not search('(?m)^[ \t]*' ~ (item.1.key | regex_escape) ~ '[ \t]*=')
       notify: Reload the user manager
 
     - name: A bound the unit declares itself is not shadowed
@@ -187,7 +245,7 @@
         label: "{{ item.0.name }}.{{ item.1.file }}"
       when: >-
         (item.0.type | default('')) == 'container'
-        and ((item.0.content | default('')) is search('(?m)^' ~ (item.1.key | regex_escape) ~ '=')
+        and ((item.0.content | default('')) is search('(?m)^[ \t]*' ~ (item.1.key | regex_escape) ~ '[ \t]*=')
              or item.1.value | length == 0)
       notify: Reload the user manager
 
@@ -199,6 +257,20 @@
       loop_control:
         label: "{{ item.name }}.{{ item.type }}"
       when: (item.state | default('present')) == 'absent'
+      notify: Reload the user manager
+
+    # The product owns two files beside a unit; withdrawing the unit must not
+    # leave them active as an orphan drop-in.
+    - name: The product's per-unit drop-ins go with the unit they bound
+      ansible.builtin.file:
+        path: "{{ quadlet_directory }}/{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1 }}"
+        state: absent
+      loop: "{{ quadlet_units | product(['50-default-memory.conf', '51-default-cpu.conf']) | list }}"
+      loop_control:
+        label: "{{ item.0.name }}.{{ item.0.type }}.d/{{ item.1 }}"
+      when:
+        - (item.0.state | default('present')) == 'absent'
+        - (item.0.type | default('')) == 'container'
       notify: Reload the user manager
 
     # The generated units exist only after a reload, and the handler runs at the
