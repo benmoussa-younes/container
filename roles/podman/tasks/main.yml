@@ -29,51 +29,54 @@
       set `podman_verify: false` and read the engine yourself.
     quiet: true
 
-# The role names Debian paths, Debian packages and a Debian kernel setting, so
-# it refuses another base before it writes anything.
-#
-# The base release is read from `/etc/debian_version`, not from
-# `ansible_distribution_major_version`: an edition brands `/etc/os-release`
-# (the Workstation Edition declares its own), and the version fact would read that
-# branding instead of the release both editions keep as Debian (measured on a
-# Debian 13 host whose edition brands it: `/etc/debian_version` = 13.7).
-- name: The base release is read
-  ansible.builtin.slurp:
-    src: /etc/debian_version
-  register: podman_debian_version
-  check_mode: false
-  failed_when: false
-
-- name: The cgroup hierarchy is read
-  ansible.builtin.command:  # noqa: command-instead-of-module
-    cmd: stat -fc %T /sys/fs/cgroup
-  register: podman_cgroup_type
-  changed_when: false
-  check_mode: false
-  failed_when: false
-
-# Quadlet needs cgroup v2, and rootless Podman needs a user namespace. Both are
-# read here rather than discovered later as a container that never starts.
-- name: The host carries the base this collection supports
-  ansible.builtin.assert:
-    that:
-      - ansible_facts.system == 'Linux'
-      - ansible_facts.os_family == 'Debian'
-      - ansible_facts.service_mgr == 'systemd'
-      - (podman_debian_version.content | default('') | b64decode | trim).split('.')[0] == '13'
-      - podman_cgroup_type.stdout | default('') | trim == 'cgroup2fs'
-    fail_msg: >-
-      {{ inventory_hostname }} is not a Debian 13 host with systemd and cgroup
-      v2 ({{ ansible_facts.distribution }}
-      {{ ansible_facts.distribution_version }}, {{ ansible_facts.service_mgr }},
-      cgroup {{ podman_cgroup_type.stdout | default('?') | trim }}). The
-      engine's paths, its packages, the unprivileged user namespace setting and
-      the Quadlet generator are Debian's.
-    quiet: true
-
 - name: The rootless Podman engine is configured
   when: podman_enabled | bool
   block:
+    # The base is read before the block writes anything: the role names Debian
+    # paths, packages and a kernel setting, so it refuses another base rather
+    # than configuring one. A disabled engine touches only its own drop-in, so
+    # the read sits inside the block.
+    #
+    # The base release is read from `/etc/debian_version`, not from
+    # `ansible_distribution_major_version`: an edition brands `/etc/os-release`
+    # (the Workstation Edition declares its own), and the version fact would read
+    # that branding instead of the release both editions keep as Debian
+    # (measured on a Debian 13 host whose edition brands it:
+    # `/etc/debian_version` = 13.7).
+    - name: The base release is read
+      ansible.builtin.slurp:
+        src: /etc/debian_version
+      register: podman_debian_version
+      check_mode: false
+      failed_when: false
+
+    - name: The cgroup hierarchy is read
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: stat -fc %T /sys/fs/cgroup
+      register: podman_cgroup_type
+      changed_when: false
+      check_mode: false
+      failed_when: false
+
+    # Quadlet needs cgroup v2, and rootless Podman needs a user namespace. Both are
+    # read here rather than discovered later as a container that never starts.
+    - name: The host carries the base this collection supports
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.system == 'Linux'
+          - ansible_facts.os_family == 'Debian'
+          - ansible_facts.service_mgr == 'systemd'
+          - (podman_debian_version.content | default('') | b64decode | trim).split('.')[0] == '13'
+          - podman_cgroup_type.stdout | default('') | trim == 'cgroup2fs'
+        fail_msg: >-
+          {{ inventory_hostname }} is not a Debian 13 host with systemd and cgroup
+          v2 ({{ ansible_facts.distribution }}
+          {{ ansible_facts.distribution_version }}, {{ ansible_facts.service_mgr }},
+          cgroup {{ podman_cgroup_type.stdout | default('?') | trim }}). The
+          engine's paths, its packages, the unprivileged user namespace setting and
+          the Quadlet generator are Debian's.
+        quiet: true
+
     - name: The owning account is declared
       ansible.builtin.assert:
         that:

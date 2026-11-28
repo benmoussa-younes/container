@@ -41,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `podman`: the Debian 13 / systemd / cgroup v2 guard sits inside the
+  `podman_enabled` block: a disabled role now only removes its own drop-in, and
+  the argument spec resolves before the account is read (`podman_home` has an
+  empty default, like `quadlet_home`).
 - `podman`: the engine's configuration moved into the account's home
   (`~/.config/containers/{containers,registries}.conf`, `policy.json`), owned
   by the account and read before the host-wide files; for `registries.conf` and

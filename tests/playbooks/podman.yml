@@ -128,3 +128,14 @@
         fail_msg: "{{ podman_rendered_two | to_nice_json }}"
       vars:
         podman_rendered_two: "{{ lookup('file', podman_proof ~ '/policy-two.json') | from_json }}"
+
+- name: The role's argument spec resolves before the account is read
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    container_host_edition: server
+    podman_enabled: false
+    podman_userns_sysctl: /tmp/opencode/podman-proof-userns/62-podman-userns.conf
+  roles:
+    - role: podman

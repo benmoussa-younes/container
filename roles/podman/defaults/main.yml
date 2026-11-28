@@ -48,6 +48,11 @@ podman_userns_sysctl: /etc/sysctl.d/62-podman-userns.conf
 # engine. The account's `registries.conf` is complete: a mirror or an insecure
 # registry the host declares in `/etc` is not inherited, and belongs in
 # `podman_registries` and the policy below.
+#
+# The account's home is read from its passwd record at role start (see the
+# tasks). The empty default keeps argument validation from templating a fact
+# that does not exist yet; `podman_config_dir` re-evaluates once it is set.
+podman_home: ""
 podman_config_dir: "{{ podman_home }}/.config/containers"
 podman_containers_file: "{{ podman_config_dir }}/containers.conf"
 podman_registries_file: "{{ podman_config_dir }}/registries.conf"
