@@ -58,6 +58,7 @@ podman_runtime: crun
 
 # The user socket and the user manager that keeps it alive without a login.
 podman_socket_enabled: true
+podman_auto_update: false
 podman_linger: true
 
 # The subordinate ID files, and the decision a broken state leads to.

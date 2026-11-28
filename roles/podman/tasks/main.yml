@@ -257,12 +257,17 @@
       changed_when: false
       when: podman_verify | bool and not ansible_check_mode
 
-    - name: The engine is rootless
+    - name: The engine is the product's
       ansible.builtin.assert:
         that:
           - (podman_info.stdout | from_json).host.security.rootless | bool
+          - (podman_info.stdout | from_json).host.cgroupVersion == 'v2'
+          - (podman_info.stdout | from_json).host.networkBackend == 'netavark'
+          - (podman_info.stdout | from_json).store.graphDriverName != 'vfs'
         fail_msg: >-
-          podman info does not report a rootless engine for {{ podman_user }}.
+          podman info for {{ podman_user }} does not report a rootless engine on
+          cgroup v2 with the netavark backend and a store other than vfs:
+          {{ podman_info.stdout }}.
       when: podman_verify | bool and not ansible_check_mode
 
     - name: The rootless socket is active
@@ -287,6 +292,49 @@
           - podman_socket_state.stdout | trim == 'active'
         fail_msg: "podman.socket is not active for {{ podman_user }}."
       when: podman_socket_enabled | bool and not ansible_check_mode
+
+    - name: The auto-update timer is enabled
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: systemctl --user enable --now podman-auto-update.timer
+      become: true
+      become_user: "{{ podman_user }}"
+      environment:
+        HOME: "{{ podman_home }}"
+        USER: "{{ podman_user }}"
+        LOGNAME: "{{ podman_user }}"
+        XDG_RUNTIME_DIR: "/run/user/{{ podman_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ podman_uid }}/bus"
+      register: podman_auto_update_enable
+      changed_when: >-
+        'Created symlink' in podman_auto_update_enable.stdout
+        or 'Created symlink' in podman_auto_update_enable.stderr
+      retries: 5
+      delay: 2
+      until: podman_auto_update_enable.rc == 0
+      when: podman_auto_update | bool and not ansible_check_mode
+
+    - name: The auto-update timer is active
+      ansible.builtin.command:  # noqa: command-instead-of-module
+        cmd: systemctl --user is-active podman-auto-update.timer
+      become: true
+      become_user: "{{ podman_user }}"
+      environment:
+        HOME: "{{ podman_home }}"
+        USER: "{{ podman_user }}"
+        LOGNAME: "{{ podman_user }}"
+        XDG_RUNTIME_DIR: "/run/user/{{ podman_uid }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ podman_uid }}/bus"
+      register: podman_auto_update_state
+      changed_when: false
+      failed_when: false
+      when: podman_auto_update | bool and not ansible_check_mode
+
+    - name: The auto-update timer runs
+      ansible.builtin.assert:
+        that:
+          - podman_auto_update_state.stdout | trim == 'active'
+        fail_msg: "podman-auto-update.timer is not active for {{ podman_user }}."
+      when: podman_auto_update | bool and not ansible_check_mode
 
     - name: The user manager lingers
       ansible.builtin.command:  # noqa: command-instead-of-module

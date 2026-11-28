@@ -93,6 +93,13 @@ argument_specs:
         type: bool
         required: false
         description: Whether the rootless user socket is enabled.
+      podman_auto_update:
+        type: bool
+        required: false
+        default: false
+        description: >-
+          Whether the account's `podman-auto-update.timer` is enabled. Without
+          the timer, a unit's `AutoUpdate=registry` is a dead setting.
       podman_linger:
         type: bool
         required: false
