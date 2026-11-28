@@ -46,8 +46,9 @@ It is shipped as the collection `benmoussa.container`.
   edition the host already carries (`server` today). Applying the engine role
   without it, or with another value, fails the run instead of guessing.
 - **The site's Quadlet declarations**: `container`, `volume`, `network`, `pod`,
-  `image`, `build` and `kube` files in the owning account's generator
-  directory, a user-manager reload and a read-back of every generated unit.
+  `image`, `build` and `kube` files, including template names
+  (`foo@.container`), in the owning account's generator directory, a
+  user-manager reload and a read-back of every generated unit.
 - **A hardening baseline in one drop-in**: `container.d/*.conf` is merged into
   every container unit of the account — no new privileges, all capabilities
   dropped, read-only rootfs with tmpfs, an init, pids and ulimit bounds,
@@ -297,11 +298,15 @@ defaults are on. Empty it deliberately if a site needs one.
   the password stays locked, and the site owns the keys and the `sudo` rule.
 - It does not store a secret, a registry credential or a site definition.
 - It does not manage a firewall port for a unit: the site that publishes a port
-  declares it.
+  declares it. It refuses a declared `PublishPort` whose host port is below the
+  host's `net.ipv4.ip_unprivileged_port_start` (read from the kernel when
+  `quadlet_unprivileged_port_start` is empty): lower that sysctl or publish a
+  higher port.
 - It does not write an image policy: no `policy.json` is shipped and a declared
   `Image=` is not required to carry a digest. Short-name resolution is the
   engine's configuration, and `AutoUpdate=registry` needs the
-  `podman-auto-update.timer`, which the site owns.
+  `podman-auto-update.timer`: the role enables it when
+  `podman_auto_update: true`.
 - It does not put a secret in a unit: `quadlet_units` is written `0644` and is
   not scanned for credentials; keep a credential in the site's vault and hand it
   to the container through the unit's own mechanism.

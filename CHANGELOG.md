@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the run), reads the account back, and checks that the home belongs to it.
   `playbooks/site.yml` runs it first, when the engine or the declarations are
   enabled.
+- `quadlet`: the published host-port floor is enforced. A `PublishPort` whose
+  host port is below `quadlet_unprivileged_port_start` (the host's
+  `net.ipv4.ip_unprivileged_port_start` when empty) fails the run, and template
+  unit names (`foo@.container`) are accepted.
+- `podman`: `podman_auto_update` (false by default) enables the account's
+  `podman-auto-update.timer`, without which a unit's `AutoUpdate=registry` is a
+  dead setting. The engine read-back now refuses a `vfs` store, a cgroup other
+  than v2 and a network backend other than netavark, instead of reading only the
+  rootless flag.
 
 ### Changed
 
