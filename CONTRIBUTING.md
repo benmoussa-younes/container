@@ -47,7 +47,10 @@ The four `tests/sanity/ignore-2.*.txt` files are identical on purpose: every
 lines apply to each supported `ansible-core` version. The gate checks that each
 file names every script.
 
-`.ansible-lint` skips `name[template]` because role task names intentionally
+`.ansible-lint` skips `meta-runtime[unsupported-version]` because the linter's
+list of supported `ansible-core` releases stops at 2.19 while the collection's
+matrix is 2.20 to 2.22; the matrix is the source of truth. It skips
+`name[template]` because role task names intentionally
 carry the loop variable, warns `var-naming[no-role-prefix]` because the
 collection's variables are prefixed by role (`podman_`, `quadlet_`, `account_`)
 rather than by the rule's expected pattern, and `.yamllint` disables
