@@ -17,7 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the run), reads the account back, and checks that the home belongs to it.
   `playbooks/site.yml` runs it first, when the engine or the declarations are
   enabled.
-- `quadlet`: the published host-port floor is enforced. A `PublishPort` whose
+- `quadlet`: `PodmanArgs`, `GlobalArgs`, `Unmask`, `SeccompProfile` and
+  `Privileged` are refused in any declared unit, whatever their value, because
+  they bypass the hardening drop-in rather than relax one setting. The
+  published host-port floor is enforced. A `PublishPort` whose
   host port is below `quadlet_unprivileged_port_start` (the host's
   `net.ipv4.ip_unprivileged_port_start` when empty) fails the run, and template
   unit names (`foo@.container`) are accepted.
@@ -29,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The supported `ansible-core` range is **2.20 to below 2.23**: 2.19 reaches
+  end of life on 2026-11-30, and the CI matrix no longer runs it.
+- The base image locks every setuid/setgid bit **after** it creates the account
+  and locks root, so a bit introduced by the account setup cannot survive.
 - `podman_user` defaults to the account `roles/account` declares
   (`account_name`, `container` by default) instead of the undefined
   `accounts_human.name`, which left the engine with an empty account on any

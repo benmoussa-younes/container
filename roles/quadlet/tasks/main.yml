@@ -220,6 +220,33 @@
              | map('regex_findall', '[=:][ \t]*([0-9]+)(?:-[0-9]+)?:[0-9]+(?:-[0-9]+)?') | flatten
              | map('int') | list }}
 
+    - name: The forbidden key prefixes are compiled once
+      ansible.builtin.set_fact:
+        quadlet_forbidden_prefix_pattern: >-
+          {{ '(?m)^[ \t]*('
+             ~ (quadlet_forbidden_prefixes | map('regex_escape') | join('|'))
+             ~ ')[ \t]*=[ \t]*' }}
+      when:
+        - quadlet_hardened_defaults | bool
+        - quadlet_forbidden_prefixes | length > 0
+
+    - name: No declared unit carries a forbidden key prefix
+      ansible.builtin.assert:
+        that:
+          - item.content is not search(quadlet_forbidden_prefix_pattern)
+        fail_msg: >-
+          `{{ item.name }}` declares a key the product forbids while the
+          hardened defaults are on: {{ quadlet_forbidden_prefixes | join(', ') }}.
+          The value is not read: any use of the key is refused.
+        quiet: true
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - quadlet_hardened_defaults | bool
+        - quadlet_forbidden_prefixes | length > 0
+        - (item.state | default('present')) == 'present'
+
     - name: The declared units are written
       ansible.builtin.copy:
         content: "{{ item.content }}"

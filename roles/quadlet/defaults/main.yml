@@ -71,6 +71,12 @@ quadlet_forbidden:
   - User=0:0
   - NoNewPrivileges=false
   - ReadOnly=false
+quadlet_forbidden_prefixes:
+  - PodmanArgs
+  - GlobalArgs
+  - Unmask
+  - SeccompProfile
+  - Privileged
 
 # Every present declaration is read back through `systemctl --user cat`.
 quadlet_verify: true

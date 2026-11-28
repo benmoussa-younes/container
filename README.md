@@ -59,6 +59,9 @@ It is shipped as the collection `benmoussa.container`.
   `User=0`, `NoNewPrivileges=false`, `ReadOnly=false` or
   `SecurityLabelDisable=true` fails the run while the hardened defaults are on.
   The match ignores the spacing around `=`, so `Network = host` is refused too.
+  Any `PodmanArgs`, `GlobalArgs`, `Unmask`, `SeccompProfile` or `Privileged`
+  key is refused in any unit type, whatever its value: those keys bypass the
+  drop-in rather than relax one setting.
 - **A base image**: the Debian minimal base pinned by digest, TLS roots,
   `tzdata`, `curl`, `procps` and the Scripts interpreter, one non-root
   account, a locked root and no setuid bit. The image keeps Debian's own
@@ -69,7 +72,7 @@ It is shipped as the collection `benmoussa.container`.
 
 - a target running **Debian 13** (`trixie`), the release the supported edition
   runs today, with the engine packages taken from the distribution;
-- `ansible-core` **2.19 or later** on the controller, with SSH access to the
+- `ansible-core` **2.20 or later, below 2.23** on the controller, with SSH access to the
   target;
 - no pre-existing account: the collection creates the engine's own login
   account (`container`, uid/gid 1500 by default), and the name, UID and GID

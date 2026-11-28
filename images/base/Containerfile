@@ -46,14 +46,13 @@ RUN apt-get update \
 
 # A setuid or setgid bit is useless once every capability is dropped, and it is
 # a known escalation vector with them. The run-time drop-in drops them all.
-RUN find / -xdev -perm /6000 -type f -exec chmod ug-s {} +
-
 # One non-root account, no login shell, a locked root: nothing to log in as.
 # `/work` is where a site mounts its content.
 RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin app \
  && passwd -l root \
  && mkdir -p /work \
- && chown app:app /work
+ && chown app:app /work \
+ && find / -xdev -perm /6000 -type f -exec chmod ug-s {} +
 
 USER 1000:1000
 WORKDIR /work

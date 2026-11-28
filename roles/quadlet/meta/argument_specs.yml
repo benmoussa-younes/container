@@ -89,6 +89,15 @@ argument_specs:
         description: >-
           Lines a declared container unit may not carry while the hardened
           defaults are on. Empty it to let a site declare any key.
+      quadlet_forbidden_prefixes:
+        type: list
+        elements: str
+        required: false
+        description: >-
+          Keys whose every value is refused in any declared unit while the
+          hardened defaults are on: the arguments and sandbox keys that would
+          bypass the drop-in (`PodmanArgs`, `GlobalArgs`, `Unmask`,
+          `SeccompProfile`, `Privileged`). Empty it deliberately.
       quadlet_unprivileged_port_start:
         type: str
         required: false
