@@ -270,10 +270,10 @@ function lines_outside_directory(lines: list<string>, directory: string) -> list
     return outside
 }
 
-# One owner of `/etc/containers/*.conf.d/99-*-podman.conf`. The product
-# writes `99-container-podman.conf` from `roles/podman/`, and the retired
-# `99-podman.conf` survives only as a removal target. Untracked files count:
-# one is still a second writer on the machine that runs the role.
+# One owner of the host-wide `/etc/containers/*.conf.d/99-*-podman.conf` names.
+# The role writes the account's configuration in its home now; both host-wide
+# names survive only as removal targets. Untracked files count: one is still a
+# second writer on the machine that runs the role.
 function check_registries_owner(root: path) -> list<string> {
     let owner = "roles/podman/defaults/main.yml"
     let engine_dir = "roles/podman/"
@@ -872,7 +872,7 @@ function check_secret_shapes(root: path) -> list<string> {
     # an ignored file under a shipped directory would reach the archive while
     # `git grep --untracked` skips it. `--no-exclude-standard` includes those
     # files, so a credential in one is caught before it is packaged.
-    let shipped = ["roles", "playbooks", "meta", "images"]
+    let shipped = ["roles", "playbooks", "meta", "images", "LICENSES"]
     let ignored = git_grep(root, ["-i", "--extended-regexp", "--no-exclude-standard"], secrets.joined(), shipped)
     for problem in note(ignored.length() == 0, "no secret shape in shipped files", ignored.join(", ")) {
         result.append(problem)
