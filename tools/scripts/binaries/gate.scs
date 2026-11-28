@@ -487,7 +487,7 @@ function check_subid_wiring(root: path) -> list<string> {
     for problem in note(apply.contains("podman_subid_map_lines") and apply.contains("regex_replace"), "subid map normalised", "roles/podman/tasks/subuid.yml compares the kernel's padded map lines without normalising them") {
         result.append(problem)
     }
-    for problem in note(defaults.contains("catatonit"), "init package declared", "roles/podman/defaults/main.yml does not install catatonit, which the Quadlet default `RunInit=true` needs") {
+    for problem in note(defaults.matches(r"(?m)^[ \t]*-[ \t]+catatonit[ \t]*$").value_or(false), "init package declared", "roles/podman/defaults/main.yml does not list catatonit as a package, which the Quadlet default `RunInit=true` needs") {
         result.append(problem)
     }
     return result
@@ -868,6 +868,15 @@ for problem in check_licences(root, false) {
 function check_secret_shapes(root: path) -> list<string> {
     let matches = git_grep(root, ["-i", "--extended-regexp"], secrets.joined(), [".", ":(exclude)LICENSES", ":(exclude)tools/scripts/modules/secrets.scs", ":(exclude)inventories"])
     let mutable result = note(matches.length() == 0, "no secret shape", matches.join(", "))
+    # `ansible-galaxy collection build` reads the working tree, not the index:
+    # an ignored file under a shipped directory would reach the archive while
+    # `git grep --untracked` skips it. `--no-exclude-standard` includes those
+    # files, so a credential in one is caught before it is packaged.
+    let shipped = ["roles", "playbooks", "meta", "images"]
+    let ignored = git_grep(root, ["-i", "--extended-regexp", "--no-exclude-standard"], secrets.joined(), shipped)
+    for problem in note(ignored.length() == 0, "no secret shape in shipped files", ignored.join(", ")) {
+        result.append(problem)
+    }
     for problem in git_search(root, ["grep", "--cached", "-IniE", "-e", secrets.joined(), "--", "inventories"], "no secret shape in tracked inventories") {
         result.append(problem)
     }

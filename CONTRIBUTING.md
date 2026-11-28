@@ -42,9 +42,9 @@ for complying with the licences when you redistribute or modify the code.
 
 ## Lint configuration
 
-The four `tests/sanity/ignore-2.*.txt` files are identical on purpose: every
-`tools/**/*.scs` carries a shebang `ansible-test` does not know, and the same
-lines apply to each supported `ansible-core` version. The gate checks that each
+The three `tests/sanity/ignore-2.*.txt` files (2.20, 2.21, 2.22) are identical
+on purpose: every `tools/**/*.scs` carries a shebang `ansible-test` does not
+know, and the same lines apply to each supported `ansible-core` version. The gate checks that each
 file names every script.
 
 `.ansible-lint` skips `meta-runtime[unsupported-version]` because the linter's

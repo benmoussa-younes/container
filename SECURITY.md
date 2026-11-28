@@ -77,8 +77,10 @@ The product declares:
   a range another account holds, a range shorter than the declared count, a
   range in one file only or two ranges in one file fail the run; the repair
   removes only this account's ranges and is opt-in (`podman_subuid_repair`);
-- one configuration drop-in per concern, named `99-container-podman.conf`, so
-  the product never overwrites a site's own file.
+- the engine's configuration in the account's home
+  (`~/.config/containers/{containers,registries}.conf` and `policy.json`), and
+  no host-wide `/etc/containers` drop-in: the old `99-container-podman.conf` is
+  removed, and the product never overwrites a site's own file.
 
 Two facts a reader must not infer from this list:
 

@@ -99,7 +99,9 @@ quadlet_forbidden_prefixes:
 
 # An image a declared `.container` or `.image` unit names is pinned by digest
 # (`@sha256:` with the full 64 hex characters), so a site runs the bytes it
-# reviewed and a moved tag cannot change them. `quadlet_units[].image_digest:
+# reviewed and a moved tag cannot change them. A `.container` may also reference
+# a `.image` unit by name (`base.image`): Quadlet reads the image that unit
+# pulls, and the `.image` unit's own `Image=` is checked like any other. `quadlet_units[].image_digest:
 # false` is the per-unit opt-out; a `.kube` unit's images live in its YAML and
 # a `.build` unit names a Containerfile the site owns.
 quadlet_image_digest_required: true

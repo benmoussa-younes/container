@@ -58,8 +58,9 @@ It is shipped as the collection `benmoussa.container`.
   `podman_registries` declares and rejects every other repository, and
   `short-name-mode = "enforcing"` refuses an ambiguous short name outside a
   terminal. A declared `.container` or `.image` names its image by digest
-  (`@sha256:` with the 64 hex characters); `image_digest: false` is the
-  per-unit opt-out.
+  (`@sha256:` with the 64 hex characters), or a `.container` references a
+  `.image` unit by name (`base.image`, whose own `Image=` is checked);
+  `image_digest: false` is the per-unit opt-out.
 - **An edition it reads, never writes**: `container_host_edition` names the
   edition the host already carries (`server` today). Applying the engine role
   without it, or with another value, fails the run instead of guessing.
@@ -372,9 +373,9 @@ defaults are on. Empty it deliberately if a site needs one.
   vault and hand it to the container through the unit's own mechanism.
 - It waits up to 30 s for `/run/user/<uid>` after enabling linger; a slower host
   fails the run instead of waiting longer.
-- The gate's wiring checks are greps and `--check` runs; the applied paths
-  (subordinate IDs, linger, socket, Quadlet generation) are proven by the
-  sandbox converge, not by the gate.
+- The gate's wiring checks are greps and `--syntax-check` runs, and it runs the
+  role fixtures; the applied paths (subordinate IDs, linger, socket, Quadlet
+  generation) are proven by the sandbox converge, not by the gate.
 - `--check` cannot report an identifier change (`usermod`, `loginctl`): only a
   real converge proves it, and a real converge is the only proof of idempotence.
 

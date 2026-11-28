@@ -76,9 +76,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`podman_short_name_mode`), and the new `policy.json` accepts only the
   registries `podman_registries` declares.
 - `quadlet`: a declared `.container` or `.image` must name its image by digest
-  (`@sha256:` and 64 hex characters) while `quadlet_image_digest_required` is
-  on; `image_digest: false` is the per-unit opt-out. `.kube` and `.build` units
-  are not parsed.
+  (`@sha256:` and 64 hex characters), or reference a `.image` unit by name
+  (`base.image`, whose own `Image=` is checked), while
+  `quadlet_image_digest_required` is on; `image_digest: false` is the per-unit
+  opt-out. `.kube` and `.build` units are not parsed. The rule reads a unit's
+  `dropins` too, and the port floor does as well: a value written beside the
+  unit cannot bypass either check.
 - The supported `ansible-core` range is **2.20 to below 2.23**: 2.19 reaches
   end of life on 2026-11-30, and the CI matrix no longer runs it.
 - The base image locks every setuid/setgid bit **after** it creates the account

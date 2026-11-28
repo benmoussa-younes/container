@@ -271,7 +271,8 @@
              if quadlet_unprivileged_port_start | string | length > 0
              else quadlet_port_floor.stdout | default('0') | trim }}
         quadlet_published_ports: >-
-          {{ item.content | default('')
+          {{ ((item.content | default('')) ~ '\n'
+              ~ (item.dropins | default([]) | map(attribute='content') | join('\n')))
              | regex_findall('(?m)^[ \t]*PublishPort[ \t]*=[ \t]*[^\n]+')
              | map('regex_findall', '[=:][ \t]*([0-9]+)(?:-[0-9]+)?:[0-9]+(?:-[0-9]+)?') | flatten
              | map('int') | list }}
@@ -325,20 +326,29 @@
     - name: Every declared image is pinned by digest
       ansible.builtin.assert:
         that:
-          - (item.content | regex_findall('(?mi)^[ \t]*Image[ \t]*=[ \t]*([^\n]+)')
-             | map('trim')
-             | reject('search', '@sha256:[0-9a-f]{64}$') | list | length == 0)
+          - quadlet_undigested_images | length == 0
         fail_msg: >-
           `{{ item.name }}` names an image without a digest:
-          {{ item.content | regex_findall('(?mi)^[ \t]*Image[ \t]*=[ \t]*([^\n]+)')
-             | map('trim') | reject('search', '@sha256:[0-9a-f]{64}$')
-             | list | join(', ') }}.
+          {{ quadlet_undigested_images | join(', ') }}.
           Pin it with `@sha256:<64 hex>`, or declare `image_digest: false` for
           this unit, or empty `quadlet_image_digest_required` deliberately.
         quiet: true
       loop: "{{ quadlet_units }}"
       loop_control:
         label: "{{ item.name }}"
+      vars:
+        # A unit's own drop-in is merged into the generated unit, so an
+        # `Image=` or a `PublishPort=` there must meet the same rule as the
+        # declaration: writing it beside the unit would otherwise bypass the
+        # digest and the port floor.
+        quadlet_declared_images: >-
+          {{ ((item.content | default('')) ~ '\n'
+              ~ (item.dropins | default([]) | map(attribute='content') | join('\n')))
+             | regex_findall('(?mi)^[ \t]*Image[ \t]*=[ \t]*([^\n]+)')
+             | map('trim') | list }}
+        quadlet_undigested_images: >-
+          {{ quadlet_declared_images
+             | reject('search', '(@sha256:[0-9a-f]{64}$|[.]image$)') | list }}
       when:
         - quadlet_image_digest_required | bool
         - (item.type | default('')) in ['container', 'image']

@@ -85,7 +85,9 @@ argument_specs:
         required: false
         description: >-
           Whether a `.container` or `.image` unit must name its image by digest
-          (`@sha256:` with the full 64 hex characters). A `.kube` unit's images
+          (`@sha256:` with the full 64 hex characters), or reference a `.image`
+          unit by name (`base.image`, whose own `Image=` is checked). A `.kube`
+          unit's images
           live in its YAML and a `.build` unit names a Containerfile the site
           owns; neither is parsed here.
       quadlet_verify:
