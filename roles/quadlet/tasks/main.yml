@@ -92,9 +92,15 @@
     - name: The declared image units are known
       ansible.builtin.set_fact:
         quadlet_image_stems: >-
-          {{ quadlet_units | selectattr('type', 'defined')
-             | selectattr('type', 'equalto', 'image')
-             | map(attribute='name') | list }}
+          {{ (quadlet_units | selectattr('type', 'defined')
+              | selectattr('type', 'equalto', 'image')
+              | selectattr('state', 'defined')
+              | selectattr('state', 'equalto', 'present')
+              | map(attribute='name') | list)
+             + (quadlet_units | selectattr('type', 'defined')
+                | selectattr('type', 'equalto', 'image')
+                | rejectattr('state', 'defined')
+                | map(attribute='name') | list) }}
 
     - name: The declarations are keyed once
       ansible.builtin.set_fact:

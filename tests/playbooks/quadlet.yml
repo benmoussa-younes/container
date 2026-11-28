@@ -1856,6 +1856,54 @@
         that:
           - quadlet_manual_reference.stat.exists
 
+- name: An .image reference to a withdrawn image unit is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: "{{ quadlet_proof }}/image-withdrawn"
+    quadlet_units:
+      - name: gonebase
+        type: image
+        state: absent
+      - name: dangling
+        type: container
+        content: |
+          [Container]
+          Image=gonebase.image
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The withdrawn image reference fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a reference to a withdrawn image unit was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the withdrawn reference, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'gonebase.image' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
 - name: The run's proof root is removed
   hosts: localhost
   connection: local
