@@ -321,3 +321,25 @@
           - not (account_name_exists | bool)
           - account_uid_holder | length == 0
           - account_gid_holder | length == 0
+
+- name: The read-back accepts an existing identity without a declared home
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    account_name: "{{ lookup('env', 'USER') }}"
+  tasks:
+    - name: The account's entry is read
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ account_name }}"
+
+    - name: The read-back runs with the account's own identity
+      ansible.builtin.include_role:
+        name: account
+        tasks_from: read-back.yml
+      vars:
+        account_uid: "{{ ansible_facts.getent_passwd[account_name][1] }}"
+        account_gid: "{{ ansible_facts.getent_passwd[account_name][2] }}"
+        account_shell: "{{ ansible_facts.getent_passwd[account_name][5] }}"
+        account_create_home: true

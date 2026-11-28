@@ -495,6 +495,7 @@ function check_required(root: path) -> list<string> {
         "roles/account/defaults/main.yml",
         "roles/account/meta/argument_specs.yml",
         "roles/account/tasks/main.yml",
+        "roles/account/tasks/read-back.yml",
         "roles/account/tasks/validate.yml",
         "roles/podman/tasks/main.yml",
         "roles/podman/tasks/subuid.yml",
