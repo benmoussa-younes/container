@@ -406,3 +406,102 @@
           - "'VACUOUS' not in podman_refusal"
           - "'podman_linger' in podman_refusal"
         fail_msg: "{{ podman_refusal | default('the include did not fail') }}"
+
+- name: A published host port below the unprivileged floor is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: /tmp/opencode/quadlet-proof/port-floor
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: 1024
+    quadlet_units:
+      - name: lowport
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+          PublishPort=443:443
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The low port fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a published host port below the floor was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the port floor, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'443' in quadlet_refusal"
+          - "'unprivileged floor' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: A high port and a template name are accepted and written
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: /tmp/opencode/quadlet-proof/port-template
+    quadlet_hardened_defaults: true
+    quadlet_unprivileged_port_start: 1024
+    quadlet_units:
+      - name: highport
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+          PublishPort=8443:443
+
+          [Install]
+          WantedBy=default.target
+      - name: probe@
+        type: container
+        boot: false
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+  tasks:
+    - name: The declarations are applied
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+
+    - name: The template unit is read
+      ansible.builtin.stat:
+        path: "{{ quadlet_directory }}/probe@.container"
+      register: quadlet_template_unit
+
+    - name: The high port is read
+      ansible.builtin.slurp:
+        src: "{{ quadlet_directory }}/highport.container"
+      register: quadlet_high_port
+
+    - name: The template name and the high port are accepted
+      ansible.builtin.assert:
+        that:
+          - quadlet_template_unit.stat.isreg | default(false)
+          - "'PublishPort=8443:443' in (quadlet_high_port.content | b64decode)"

@@ -28,6 +28,7 @@ quadlet_user: "{{ podman_user | default(account_name | default('')) }}"
 # Two declarations may not share a name and a type: the second would overwrite
 # the first file silently.
 quadlet_units: []
+quadlet_unprivileged_port_start: ""
 
 # The account's home is read from the passwd record at role start (see the
 # tasks). The empty default keeps argument validation from resolving a fact that
