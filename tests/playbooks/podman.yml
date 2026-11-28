@@ -47,7 +47,6 @@
           - podman_rendered_engine is search('(?m)^cgroup_manager = "systemd"$')
           - podman_rendered_engine is search('(?m)^events_logger = "journald"$')
           - podman_rendered_engine is search('(?m)^runtime = "crun"$')
-          - podman_rendered_engine is search('(?m)^no_new_privileges = true$')
           - podman_rendered_engine is search('(?m)^pids_limit = 512$')
           - podman_rendered_engine is search('(?m)^log_size_max = 10485760$')
           - podman_rendered_engine is search('(?m)^umask = "0077"$')
@@ -57,6 +56,29 @@
           - podman_rendered_engine is search('(?m)^default_ulimits = \["nofile=1024:4096"\]$')
           - podman_rendered_engine is search('(?m)^pull_policy = "missing"$')
           - podman_rendered_engine is search('(?m)^default_rootless_network_cmd = "pasta"$')
+        fail_msg: "{{ podman_rendered_engine }}"
+      vars:
+        podman_rendered_engine: "{{ podman_proof_files.results[0].content | b64decode }}"
+
+    # `pull_policy` is an engine key; in `[containers]` Podman 5.4.2 accepts
+    # and ignores it (measured: a create with the key in `[containers]` still
+    # pulls, with it in `[engine]` it fails "image not known"). The key is
+    # asserted inside the engine block, not merely in the file.
+    - name: The engine keys sit in the engine table
+      ansible.builtin.assert:
+        that:
+          - podman_engine_section is search('(?m)^pull_policy = "missing"$')
+        fail_msg: "{{ podman_engine_section }}"
+      vars:
+        podman_rendered_engine: "{{ podman_proof_files.results[0].content | b64decode }}"
+        podman_engine_section: >-
+          {{ podman_rendered_engine
+             | regex_findall('(?ms)^\[engine\][ \t]*\n(.*?)(?=^\[)') | join('\n') }}
+
+    - name: The inert key is not written
+      ansible.builtin.assert:
+        that:
+          - "podman_rendered_engine is not search('(?m)^no_new_privileges[ \\t]*=')"
         fail_msg: "{{ podman_rendered_engine }}"
       vars:
         podman_rendered_engine: "{{ podman_proof_files.results[0].content | b64decode }}"

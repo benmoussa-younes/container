@@ -67,7 +67,6 @@ podman_stale_config_files:
   - "{{ podman_legacy_registries_dir }}/99-container-podman.conf"
   - "{{ podman_legacy_containers_dir }}/99-container-podman.conf"
 
-podman_no_new_privileges: true
 podman_pids_limit: 512
 podman_log_size_max: 10485760
 podman_umask: "0077"

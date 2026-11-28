@@ -42,7 +42,7 @@ argument_specs:
         description: >-
           The registries an unqualified image name searches, and the only ones
           the account may pull from: the image policy rejects every other
-          repository.
+          repository, so an empty list rejects every pull.
       podman_short_name_mode:
         type: str
         required: false
@@ -89,12 +89,6 @@ argument_specs:
           this role wrote before it moved to the account's home. The role
           removes them before writing the account's files, so exactly one file
           owns each configuration.
-      podman_no_new_privileges:
-        type: bool
-        required: false
-        description: >-
-          Whether every container of the engine runs with `no_new_privileges`.
-          True overrides the `containers.conf` default, which is false.
       podman_pids_limit:
         type: int
         required: false

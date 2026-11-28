@@ -20,10 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `quadlet`: a declaration carries `dropins`, a list of `{name, content}` files
   written into `<name>.<type>.d/`. The role refuses a name that does not end in
   `.conf`, a name the product owns, a duplicate and a drop-in on an absent unit,
-  keeps the list it wrote in `.ansible-managed.json`, removes a drop-in the site
-  stops declaring (or withdraws with its unit), and reads every declared drop-in
-  back through `systemctl --user cat`. The argument/sandbox keys stay refused in
-  a drop-in too.
+  keeps the list it wrote in `.ansible-managed.json`, and removes a drop-in the
+  site stops declaring (or withdraws with its unit). Quadlet merges each
+  declared `.conf` into the generated unit without naming it there, so the
+  sandbox asserts the drop-in's effect. The argument/sandbox keys stay refused
+  in a drop-in too.
 - `quadlet`: `PodmanArgs`, `GlobalArgs`, `Unmask`, `SeccompProfile` and
   `Privileged` are refused in any declared unit, whatever their value, because
   they bypass the hardening drop-in rather than relax one setting. The
@@ -47,6 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registry list is complete. The role removes the host-wide
   `99-container-podman.conf` it wrote before and the `99-podman.conf` of the
   retired edition roles, and never writes `/etc/containers` again.
+- `podman`: `no_new_privileges` is removed from `containers.conf` and the
+  `podman_no_new_privileges` variable is gone: Podman 5.4.2 accepts the key and
+  never applies it (measured: `NoNewPrivs` stays 0 with the key in either
+  table and turns 1 with `--security-opt no-new-privileges`). The Quadlet
+  hardening drop-in still sets `NoNewPrivileges=true` for the product's units.
 - `podman`: `containers.conf` states the product's choices: a read-only root
   (`podman_read_only`), the distribution's seccomp profile
   (`podman_seccomp_profile`), the caller's user namespace (`podman_userns`),

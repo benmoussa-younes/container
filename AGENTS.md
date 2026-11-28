@@ -70,11 +70,11 @@ podman build -t localhost/benmoussa/container:test images/base
 
 ## Security
 
-- The engine's defaults are the product's: no new privileges, a read-only
-  root, bounded pids and nofile, umask, the `crun` runtime, the distribution's
-  seccomp profile, an image policy that accepts only the declared registries;
-  the Quadlet role adds the hardening drop-in and refuses a unit that relaxes
-  it.
+- The engine's defaults are the product's: a read-only root, bounded pids and
+  nofile, umask, the `crun` runtime, the distribution's seccomp profile, an
+  image policy that accepts only the declared registries; the Quadlet role adds
+  the hardening drop-in (which carries `NoNewPrivileges=true`) and refuses a
+  unit that relaxes it.
 - The base image carries a locked root, one non-root account, no setuid bit and
   no package list; the Scripts interpreter is verified against its release
   `SHA256SUMS`.

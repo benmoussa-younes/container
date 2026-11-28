@@ -48,7 +48,6 @@
     - name: The engine defaults are the product's
       ansible.builtin.assert:
         that:
-          - "'no_new_privileges = true' in podman_sandbox_engine"
           - "'pids_limit = 512' in podman_sandbox_engine"
           - "'runtime = \"crun\"' in podman_sandbox_engine"
           - "'read_only = true' in podman_sandbox_engine"
@@ -185,13 +184,20 @@
       changed_when: false
       failed_when: false
 
+    # Quadlet merges a unit's `dropins` into the generated unit and does not
+    # name the input file there, so the read-back asserts the drop-in's effect:
+    # `Copy=true` comes from `sandbox-state.volume.d/50-copy.conf`.
     - name: The generated unit carries the declared drop-in
       ansible.builtin.assert:
         that:
           - podman_sandbox_quadlet.rc == 0
-          - "'sandbox-state.volume.d/50-copy.conf' in podman_sandbox_quadlet.stdout"
           - "'Copy=true' in podman_sandbox_quadlet.stdout"
+          - "'SourcePath=' + sandbox_quadlet_source in podman_sandbox_quadlet.stdout"
         fail_msg: "{{ podman_sandbox_quadlet.stdout | default('nothing') }}"
+      vars:
+        sandbox_quadlet_source: >-
+          {{ (ansible_facts.getent_passwd[account_name][4] | default('/'))
+             ~ '/.config/containers/systemd/sandbox-state.volume' }}
 
     - name: The kernel mapping is read
       ansible.builtin.command:  # noqa: command-instead-of-module

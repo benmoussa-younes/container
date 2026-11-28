@@ -35,14 +35,17 @@ It is shipped as the collection `benmoussa.container`.
   lets the engine adopt it (`podman system migrate`) and reads the kernel's
   `uid_map` and `gid_map` back. A host that delegates subordinate IDs to an NSS
   provider is refused, because the role reads the files.
-- **The engine's defaults, decided**: Debian leaves `no_new_privileges` off,
-  the root file system writable and the pids limit at 1024. The product turns
-  the first on, makes the root read-only, bounds the pids and the nofile
-  ulimit, sets `umask` 0077, names the `crun` runtime, keeps the
-  distribution's seccomp profile and the caller's user namespace, and pulls an
-  image only when it is missing. Container logs go to journald, whose retention
-  belongs to the host journal: `log_size_max` only bounds the file driver,
-  which the product's units do not use.
+- **The engine's defaults, decided**: Debian leaves the root file system
+  writable and the pids limit at 1024. The product makes the root read-only,
+  bounds the pids and the nofile ulimit, sets `umask` 0077, names the `crun`
+  runtime, keeps the distribution's seccomp profile and the caller's user
+  namespace, and pulls an image only when it is missing. Container logs go to
+  journald, whose retention belongs to the host journal: `log_size_max` only
+  bounds the file driver, which the product's units do not use.
+  `no_new_privileges` is deliberately absent: Podman 5.4.2 accepts the key and
+  never applies it (measured), so the product's Quadlet units carry
+  `NoNewPrivileges=true` in the hardening drop-in instead, and an ad-hoc run
+  declares `--security-opt no-new-privileges`.
 - **The configuration belongs to the account**: Podman reads
   `~/.config/containers/{containers,registries}.conf` and `policy.json` for one
   user before the host-wide files, and for `registries.conf` and `policy.json`
@@ -63,8 +66,8 @@ It is shipped as the collection `benmoussa.container`.
 - **The site's Quadlet declarations**: `container`, `volume`, `network`, `pod`,
   `image`, `build` and `kube` files, including template names
   (`foo@.container`) and their drop-ins, in the owning account's generator
-  directory, a user-manager reload and a read-back of every generated unit and
-  every declared drop-in.
+  directory, a user-manager reload and a read-back of every generated unit;
+  the sandbox asserts that a declared drop-in is merged into it.
 - **A hardening baseline in one drop-in**: `container.d/*.conf` is merged into
   every container unit of the account — no new privileges, all capabilities
   dropped, read-only rootfs with tmpfs, an init, pids and ulimit bounds,
@@ -240,7 +243,7 @@ inside keep their own licences (see `NOTICE`).
 |---|---|---|
 | `account` | The login account the rootless engine runs as: the group, the account, its UID, GID, home and shell. The name, UID and GID are inventory values (`container`, 1500:1500 by default). It refuses to rewrite an existing identity and creates no subordinate ID, no linger and no engine configuration. | implemented |
 | `podman` | The rootless engine for the account `account` creates: packages, the account's `containers.conf`, `registries.conf` and `policy.json` (`read_only`, bounded pids and nofile, `umask`, `crun`, the distribution's seccomp profile, the caller's user namespace, `pull_policy`, an enforcing short-name mode and a policy that accepts only the declared registries), user socket, the opt-in auto-update timer, linger and subordinate IDs. The read-back refuses a `vfs` store, a cgroup other than v2 and a backend other than netavark. It creates no container and never enables the rootful socket. | implemented |
-| `quadlet` | The site's Quadlet declarations (template names and drop-ins included), the published host-port floor, the product's global hardening drop-in, the refusal of keys that relax it and of the argument/sandbox keys whatever their value, a user-manager reload and a read-back of every generated unit and declared drop-in. It creates no image, volume, network, pod or container. | implemented |
+| `quadlet` | The site's Quadlet declarations (template names and drop-ins included), the published host-port floor, the product's global hardening drop-in, the refusal of keys that relax it and of the argument/sandbox keys whatever their value, a user-manager reload and a read-back of every generated unit. It creates no image, volume, network, pod or container. | implemented |
 
 `playbooks/site.yml` runs `account`, `podman` then `quadlet`, all opt-in with
 `account_enabled`, `podman_enabled` and `quadlet_enabled`. The account comes
@@ -274,8 +277,9 @@ into the generated unit, which is the narrow way to relax one property without
 emptying `quadlet_forbidden` for every unit. The role refuses a name that does
 not end in `.conf` or that the product owns (`quadlet_product_dropins`), keeps
 the list it wrote in `<name>.<type>.d/.ansible-managed.json` (a name Quadlet
-ignores), removes a drop-in the site stops declaring, and reads every declared
-drop-in back through `systemctl --user cat`.
+ignores), and removes a drop-in the site stops declaring. Quadlet merges every
+declared `.conf` into the generated unit and does not name the input file
+there, so the sandbox asserts the drop-in's effect (`Copy=true`) instead.
 
 A `container` or `kube` unit must carry `[Install]` with `WantedBy=` or
 `RequiredBy=`: Quadlet applies that section at generation and starts nothing at
@@ -332,6 +336,11 @@ defaults are on. Empty it deliberately if a site needs one.
 - It does not set a password, a key or a privilege on the account it creates:
   the password stays locked, and the site owns the keys and the `sudo` rule.
 - It does not store a secret, a registry credential or a site definition.
+- It does not set `no_new_privileges` in `containers.conf`: Podman 5.4.2
+  accepts the key and never applies it (measured: `NoNewPrivs` stays 0 with the
+  key in either table, and turns 1 with `--security-opt no-new-privileges`).
+  The Quadlet hardening drop-in sets it for the product's units; an ad-hoc run
+  declares it itself.
 - It does not manage a firewall port for a unit: the site that publishes a port
   declares it. It refuses a declared `PublishPort` whose host port is below the
   host's `net.ipv4.ip_unprivileged_port_start` (read from the kernel when

@@ -153,7 +153,7 @@
         # files, and the user file replaces the host-wide one for
         # `registries.conf` and `policy.json` (`man 5 containers.conf`,
         # `man 5 containers-registries.conf`, `man 5 containers-policy.json`).
-        - { path: "{{ podman_home }}/.config", owner: "{{ podman_user }}", group: "{{ podman_group }}", mode: "0755" }
+        - { path: "{{ podman_home }}/.config", owner: "{{ podman_user }}", group: "{{ podman_group }}", mode: "0700" }
         - { path: "{{ podman_config_dir }}", owner: "{{ podman_user }}", group: "{{ podman_group }}", mode: "0700" }
         # The sysctl drop-in is host-wide: a kernel setting has no per-account
         # form. It may be relocated (a sandbox keeps it under /var/tmp), so its
