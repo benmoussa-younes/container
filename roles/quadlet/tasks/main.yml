@@ -318,6 +318,29 @@
         - quadlet_forbidden_prefixes | length > 0
         - (item.0.state | default('present')) == 'present'
 
+    - name: Every declared image is pinned by digest
+      ansible.builtin.assert:
+        that:
+          - (item.content | regex_findall('(?mi)^[ \t]*Image[ \t]*=[ \t]*([^\n]+)')
+             | map('trim')
+             | reject('search', '@sha256:[0-9a-f]{64}$') | list | length == 0)
+        fail_msg: >-
+          `{{ item.name }}` names an image without a digest:
+          {{ item.content | regex_findall('(?mi)^[ \t]*Image[ \t]*=[ \t]*([^\n]+)')
+             | map('trim') | reject('search', '@sha256:[0-9a-f]{64}$')
+             | list | join(', ') }}.
+          Pin it with `@sha256:<64 hex>`, or declare `image_digest: false` for
+          this unit, or empty `quadlet_image_digest_required` deliberately.
+        quiet: true
+      loop: "{{ quadlet_units }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when:
+        - quadlet_image_digest_required | bool
+        - (item.type | default('')) in ['container', 'image']
+        - (item.state | default('present')) == 'present'
+        - item.image_digest | default(true) | bool
+
     - name: The declared units are written
       ansible.builtin.copy:
         content: "{{ item.content }}"

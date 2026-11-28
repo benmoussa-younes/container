@@ -22,7 +22,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
           Network = host
 
           [Install]
@@ -70,7 +70,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
   tasks:
     - name: The unit without [Install] fails the run
       block:
@@ -115,7 +115,7 @@
         boot: false
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
   tasks:
     - name: The declarations are applied
       ansible.builtin.include_role:
@@ -147,7 +147,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
           [Install]
           WantedBy=default.target
@@ -203,7 +203,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
           [Service]
           MemoryMax = 1G
@@ -287,7 +287,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
           [Install]
           WantedBy=default.target
@@ -424,7 +424,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
           PublishPort=443:443
 
           [Install]
@@ -473,7 +473,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
           PublishPort=8443:443
 
           [Install]
@@ -482,7 +482,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
           [Install]
           WantedBy=default.target
@@ -526,7 +526,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
           PublishPort = 443:443
 
           [Install]
@@ -574,7 +574,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
           PublishPort=443-445:443-445
 
           [Install]
@@ -622,7 +622,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
           PublishPort=443:443
 
           [Install]
@@ -678,7 +678,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
           [Install]
           WantedBy=default.target
@@ -768,7 +768,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
           Unmask=ALL
 
           [Install]
@@ -816,7 +816,7 @@
         type: container
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
           PublishPort=443:443
 
           [Install]
@@ -872,7 +872,7 @@
               LimitNOFILE=8192
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
           [Install]
           WantedBy=default.target
@@ -917,7 +917,7 @@
                   LimitNOFILE=8192
             content: |
               [Container]
-              Image=docker.io/library/alpine:3.20
+              Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
               [Install]
               WantedBy=default.target
@@ -948,7 +948,7 @@
             type: container
             content: |
               [Container]
-              Image=docker.io/library/alpine:3.20
+              Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
               [Install]
               WantedBy=default.target
@@ -986,7 +986,7 @@
               Network=host
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
           [Install]
           WantedBy=default.target
@@ -1049,7 +1049,7 @@
               Network=host
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
           [Install]
           WantedBy=default.target
@@ -1091,7 +1091,7 @@
                   MemoryMax=1G
             content: |
               [Container]
-              Image=docker.io/library/alpine:3.20
+              Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
               [Install]
               WantedBy=default.target
@@ -1135,7 +1135,7 @@
                   ReadOnly=false
             content: |
               [Container]
-              Image=docker.io/library/alpine:3.20
+              Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
               [Install]
               WantedBy=default.target
@@ -1219,7 +1219,7 @@
               Privileged=true
         content: |
           [Container]
-          Image=docker.io/library/alpine:3.20
+          Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 
           [Install]
           WantedBy=default.target
@@ -1247,4 +1247,121 @@
         that:
           - "'VACUOUS' not in quadlet_refusal"
           - "'Privileged' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+- name: An image named by tag is refused, unless the unit opts out
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: /tmp/opencode/quadlet-proof/image-digest
+    quadlet_units:
+      - name: floated
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The tag-only image fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: an image named by tag was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the digest, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'without a digest' in quadlet_refusal"
+          - "'docker.io/library/alpine:3.20' in quadlet_refusal"
+        fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"
+
+    - name: The unit opts out of the digest requirement
+      ansible.builtin.include_role:
+        name: quadlet
+        tasks_from: main.yml
+      vars:
+        quadlet_units:
+          - name: floated
+            type: container
+            image_digest: false
+            content: |
+              [Container]
+              Image=docker.io/library/alpine:3.20
+
+              [Install]
+              WantedBy=default.target
+
+    - name: The opted-out unit is written
+      ansible.builtin.stat:
+        path: /tmp/opencode/quadlet-proof/image-digest/floated.container
+      register: quadlet_floated_written
+
+    - name: The opt-out is the site's explicit choice
+      ansible.builtin.assert:
+        that:
+          - quadlet_floated_written.stat.exists
+
+- name: A digest that is not the full sha256 is refused
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    quadlet_enabled: true
+    quadlet_user: "{{ lookup('env', 'USER') }}"
+    quadlet_reload: false
+    quadlet_verify: false
+    quadlet_directory: /tmp/opencode/quadlet-proof/image-short-digest
+    quadlet_units:
+      - name: shortdigest
+        type: container
+        content: |
+          [Container]
+          Image=docker.io/library/alpine:3.20@sha256:deadbeef
+
+          [Install]
+          WantedBy=default.target
+  tasks:
+    - name: The truncated digest fails the run
+      block:
+        - name: The declarations are applied
+          ansible.builtin.include_role:
+            name: quadlet
+            tasks_from: main.yml
+
+        - name: The refusal is missing
+          ansible.builtin.fail:
+            msg: "VACUOUS: a truncated digest was accepted"
+      rescue:
+        - name: The refusal is read
+          ansible.builtin.set_fact:
+            quadlet_refusal: >-
+              {{ (ansible_failed_result.results | default([])
+                  | map(attribute='msg') | list
+                  + [ansible_failed_result.msg | default('')]) | join(' ') }}
+
+    - name: The run failed on the digest length, not on something else
+      ansible.builtin.assert:
+        that:
+          - "'VACUOUS' not in quadlet_refusal"
+          - "'without a digest' in quadlet_refusal"
         fail_msg: "{{ quadlet_refusal | default('the include did not fail') }}"

@@ -24,11 +24,11 @@ It is shipped as the collection `benmoussa.container`.
   uid/gid 1500 by default, and the name, the UID, the GID, the home and the
   shell are the site's. It refuses to move an existing identity: an account
   whose UID differs fails the run, it is never rewritten.
-- **One rootless engine**: packages, registry search path, the engine's
-  drop-in, the user socket, linger, subordinate IDs and the opt-in auto-update
-  timer. The read-back refuses a `vfs` store, a cgroup other than v2 and a
-  network backend other than netavark. The rootful socket is never enabled and
-  `/etc/containers/systemd` is never written.
+- **One rootless engine**: packages, registry search path, the account's
+  engine configuration, the user socket, linger, subordinate IDs and the opt-in
+  auto-update timer. The read-back refuses a `vfs` store, a cgroup other than
+  v2 and a network backend other than netavark. The rootful socket is never
+  enabled and `/etc/containers/systemd` is never written.
 - **Subordinate IDs that are planned, not guessed**: the role computes the
   account's range from `/etc/subuid` and `/etc/subgid`, refuses one another
   account already holds, adds the first free block when the account has none,
@@ -36,14 +36,27 @@ It is shipped as the collection `benmoussa.container`.
   `uid_map` and `gid_map` back. A host that delegates subordinate IDs to an NSS
   provider is refused, because the role reads the files.
 - **The engine's defaults, decided**: Debian leaves `no_new_privileges` off,
-  the pids limit at 1024. The product turns the first on, bounds the pids,
-  sets `umask` 0077 and names the `crun` runtime. Container logs go to
-  journald, whose retention belongs to the host journal: `log_size_max` only
-  bounds the file driver, which the product's units do not use.
-- **One writer per file**: the engine writes `99-container-podman.conf` and
-  removes the `99-podman.conf` the retired edition roles left under the same
-  directories, so the lexical order of `99-*.conf` can no longer make an old
-  file win.
+  the root file system writable and the pids limit at 1024. The product turns
+  the first on, makes the root read-only, bounds the pids and the nofile
+  ulimit, sets `umask` 0077, names the `crun` runtime, keeps the
+  distribution's seccomp profile and the caller's user namespace, and pulls an
+  image only when it is missing. Container logs go to journald, whose retention
+  belongs to the host journal: `log_size_max` only bounds the file driver,
+  which the product's units do not use.
+- **The configuration belongs to the account**: Podman reads
+  `~/.config/containers/{containers,registries}.conf` and `policy.json` for one
+  user before the host-wide files, and for `registries.conf` and `policy.json`
+  the user file replaces the host-wide one. The role writes there, owned by the
+  account, and never into `/etc/containers`: root and every other user keep
+  their engine. The host-wide `99-container-podman.conf` and `99-podman.conf`
+  the older versions and the retired edition roles left are removed, so exactly
+  one file owns each configuration.
+- **An image policy**: the account's `policy.json` accepts only the registries
+  `podman_registries` declares and rejects every other repository, and
+  `short-name-mode = "enforcing"` refuses an ambiguous short name outside a
+  terminal. A declared `.container` or `.image` names its image by digest
+  (`@sha256:` with the 64 hex characters); `image_digest: false` is the
+  per-unit opt-out.
 - **An edition it reads, never writes**: `container_host_edition` names the
   edition the host already carries (`server` today). Applying the engine role
   without it, or with another value, fails the run instead of guessing.
@@ -226,7 +239,7 @@ inside keep their own licences (see `NOTICE`).
 | Role | Purpose | Status |
 |---|---|---|
 | `account` | The login account the rootless engine runs as: the group, the account, its UID, GID, home and shell. The name, UID and GID are inventory values (`container`, 1500:1500 by default). It refuses to rewrite an existing identity and creates no subordinate ID, no linger and no engine configuration. | implemented |
-| `podman` | The rootless engine for the account `account` creates: packages, registry search path, engine drop-in with the product's defaults, user socket, the opt-in auto-update timer, linger and subordinate IDs. The read-back refuses a `vfs` store, a cgroup other than v2 and a backend other than netavark. It creates no container and never enables the rootful socket. | implemented |
+| `podman` | The rootless engine for the account `account` creates: packages, the account's `containers.conf`, `registries.conf` and `policy.json` (`read_only`, bounded pids and nofile, `umask`, `crun`, the distribution's seccomp profile, the caller's user namespace, `pull_policy`, an enforcing short-name mode and a policy that accepts only the declared registries), user socket, the opt-in auto-update timer, linger and subordinate IDs. The read-back refuses a `vfs` store, a cgroup other than v2 and a backend other than netavark. It creates no container and never enables the rootful socket. | implemented |
 | `quadlet` | The site's Quadlet declarations (template names and drop-ins included), the published host-port floor, the product's global hardening drop-in, the refusal of keys that relax it and of the argument/sandbox keys whatever their value, a user-manager reload and a read-back of every generated unit and declared drop-in. It creates no image, volume, network, pod or container. | implemented |
 
 `playbooks/site.yml` runs `account`, `podman` then `quadlet`, all opt-in with
@@ -284,7 +297,7 @@ quadlet_units:
       Description=Example service
 
       [Container]
-      Image=docker.io/library/alpine:3.20
+      Image=docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
       Exec=sleep infinity
 
       [Install]
@@ -324,11 +337,11 @@ defaults are on. Empty it deliberately if a site needs one.
   host's `net.ipv4.ip_unprivileged_port_start` (read from the kernel when
   `quadlet_unprivileged_port_start` is empty): lower that sysctl or publish a
   higher port.
-- It does not write an image policy: no `policy.json` is shipped and a declared
-  `Image=` is not required to carry a digest. Short-name resolution is the
-  engine's configuration, and `AutoUpdate=registry` needs the
-  `podman-auto-update.timer`: the role enables it when
-  `podman_auto_update: true`.
+- It does not require a digest on a `.kube` unit (its images live in the YAML)
+  or a `.build` unit (it names a Containerfile the site owns): the digest rule
+  covers `.container` and `.image`, where `image_digest: false` is the opt-out.
+  `AutoUpdate=registry` needs the `podman-auto-update.timer`: the role enables
+  it when `podman_auto_update: true`.
 - It does not put a secret in a unit: `quadlet_units` is written `0644` and is
   not scanned for credentials; keep a credential in the site's vault and hand it
   to the container through the unit's own mechanism.

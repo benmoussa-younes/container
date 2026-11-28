@@ -1,2 +1,9 @@
 # Managed by Ansible: the registries an unqualified image name searches.
+#
+# Podman uses this file in place of the host-wide `/etc/containers/registries.conf`
+# for this account (`man 5 containers-registries.conf`), so the list is
+# complete: a mirror or an insecure registry the host declares is not inherited.
+# `short-name-mode = "enforcing"` refuses an ambiguous short name outside a
+# terminal instead of silently picking the first search registry.
 unqualified-search-registries = {{ podman_registries | to_json }}
+short-name-mode = "{{ podman_short_name_mode }}"

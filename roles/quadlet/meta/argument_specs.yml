@@ -33,6 +33,10 @@ argument_specs:
           kube unit must then carry `[Install]` with `WantedBy=` or
           `RequiredBy=`, because Quadlet starts nothing at boot without it
           (`boot: false` is the opt-out for a unit another unit starts), and an
+          an optional `image_digest` that defaults to true: a `.container` or
+          `.image` unit that names an image without `@sha256:` is refused while
+          `quadlet_image_digest_required` is on, and `image_digest: false` is
+          the per-unit opt-out, and an
           optional `dropins`: a list of `{name, content}` entries written into
           `<stem>.<type>.d/<name>`. Quadlet reads every `.conf` file there and
           merges it into the generated unit, which is the narrow way to relax
@@ -75,6 +79,14 @@ argument_specs:
           The `CPUQuota=` value every container unit gets unless it declares
           its own (`50%`, where 100% is one thread). Empty writes no default,
           with the same drop-in rule as `quadlet_default_memory`.
+      quadlet_image_digest_required:
+        type: bool
+        required: false
+        description: >-
+          Whether a `.container` or `.image` unit must name its image by digest
+          (`@sha256:` with the full 64 hex characters). A `.kube` unit's images
+          live in its YAML and a `.build` unit names a Containerfile the site
+          owns; neither is parsed here.
       quadlet_verify:
         type: bool
         required: false

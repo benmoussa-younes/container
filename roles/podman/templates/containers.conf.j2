@@ -1,8 +1,11 @@
 # Managed by Ansible: the rootless engine uses the account's systemd manager.
 #
 # Debian's defaults are permissive where a product should decide: no new
-# privileges off, logs unbounded, 1024 pids, umask 0022. These values apply to
-# every container of the engine, whether a unit declares it or a person runs it.
+# privileges off, a writable root file system, unbounded logs, 1024 pids, umask
+# 0022. These values apply to every container of the account, whether a unit
+# declares it or a person runs it. Podman reads this file before the host-wide
+# ones and the account's values win (`man 5 containers.conf`); nothing here
+# applies to root or to another user.
 [engine]
 cgroup_manager = "systemd"
 events_logger = "journald"
@@ -13,3 +16,11 @@ no_new_privileges = {{ 'true' if podman_no_new_privileges else 'false' }}
 pids_limit = {{ podman_pids_limit }}
 log_size_max = {{ podman_log_size_max }}
 umask = "{{ podman_umask }}"
+read_only = {{ 'true' if podman_read_only else 'false' }}
+seccomp_profile = "{{ podman_seccomp_profile }}"
+userns = "{{ podman_userns }}"
+default_ulimits = {{ podman_default_ulimits | to_json }}
+pull_policy = "{{ podman_pull_policy }}"
+
+[network]
+default_rootless_network_cmd = "pasta"

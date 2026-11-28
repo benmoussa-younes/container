@@ -40,6 +40,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `podman`: the engine's configuration moved into the account's home
+  (`~/.config/containers/{containers,registries}.conf`, `policy.json`), owned
+  by the account and read before the host-wide files; for `registries.conf` and
+  `policy.json` the user file replaces the host-wide one, so the account's
+  registry list is complete. The role removes the host-wide
+  `99-container-podman.conf` it wrote before and the `99-podman.conf` of the
+  retired edition roles, and never writes `/etc/containers` again.
+- `podman`: `containers.conf` states the product's choices: a read-only root
+  (`podman_read_only`), the distribution's seccomp profile
+  (`podman_seccomp_profile`), the caller's user namespace (`podman_userns`),
+  the nofile ulimit (`podman_default_ulimits`), `pull_policy`, and the `pasta`
+  rootless network command.
+- `podman`: `registries.conf` sets `short-name-mode = "enforcing"`
+  (`podman_short_name_mode`), and the new `policy.json` accepts only the
+  registries `podman_registries` declares.
+- `quadlet`: a declared `.container` or `.image` must name its image by digest
+  (`@sha256:` and 64 hex characters) while `quadlet_image_digest_required` is
+  on; `image_digest: false` is the per-unit opt-out. `.kube` and `.build` units
+  are not parsed.
 - The supported `ansible-core` range is **2.20 to below 2.23**: 2.19 reaches
   end of life on 2026-11-30, and the CI matrix no longer runs it.
 - The base image locks every setuid/setgid bit **after** it creates the account

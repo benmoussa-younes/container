@@ -24,6 +24,9 @@ quadlet_user: "{{ podman_user | default(account_name | default('')) }}"
 #            `RequiredBy=`, because Quadlet applies that section at generation and
 #            starts nothing at boot without it. `boot: false` is the explicit
 #            opt-out for a unit another unit starts.
+#   image_digest: a `.container` or `.image` that names an image without
+#            `@sha256:` is refused while `quadlet_image_digest_required` is on;
+#            `false` here is the per-unit opt-out.
 #
 #   dropins: a list of `{name, content}` entries written into
 #            `<stem>.<type>.d/<name>`: Quadlet reads every `.conf` file there and
@@ -93,6 +96,13 @@ quadlet_forbidden_prefixes:
   - Unmask
   - SeccompProfile
   - Privileged
+
+# An image a declared `.container` or `.image` unit names is pinned by digest
+# (`@sha256:` with the full 64 hex characters), so a site runs the bytes it
+# reviewed and a moved tag cannot change them. `quadlet_units[].image_digest:
+# false` is the per-unit opt-out; a `.kube` unit's images live in its YAML and
+# a `.build` unit names a Containerfile the site owns.
+quadlet_image_digest_required: true
 
 # Every present declaration is read back through `systemctl --user cat`.
 quadlet_verify: true

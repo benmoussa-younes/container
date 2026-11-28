@@ -307,16 +307,28 @@ function check_registries_owner(root: path) -> list<string> {
         result.append(problem)
     }
     # A writer may name one of the engine's variables instead of the path: the
-    # directory ones too, because a second file under the same directory is the
-    # collision this check exists for.
-    for variable in ["podman_registries_dir", "podman_registries_file", "podman_containers_dir", "podman_containers_file"] {
+    # account's configuration files too, because a second file beside them is
+    # the collision this check exists for.
+    for variable in ["podman_config_dir", "podman_containers_file", "podman_registries_file", "podman_policy_file", "podman_legacy_registries_dir", "podman_legacy_containers_dir"] {
         let lines = git_grep_literal(root, variable, code_paths)
         for problem in note(lines_outside_directory(lines, engine_dir).length() == 0, "engine configuration variable owner", lines_outside_directory(lines, engine_dir).join("; ")) {
             result.append(problem)
         }
     }
-    for problem in note(read_text(root, owner).contains("99-container-podman.conf"), "product drop-in name", "{owner} does not name `99-container-podman.conf`") {
+    # The account's files are the destinations; the two host-wide names are
+    # removal targets only. A task that writes `99-container-podman.conf` again
+    # would give the account two writers of one configuration.
+    let main = read_text(root, "roles/podman/tasks/main.yml")
+    for problem in note(not main.contains("99-container-podman.conf"), "host-wide drop-in removed only", "roles/podman/tasks/main.yml still writes `99-container-podman.conf`") {
         result.append(problem)
+    }
+    for problem in note(read_text(root, owner).contains("99-container-podman.conf"), "retired product drop-in removed", "{owner} does not name `99-container-podman.conf` in its removal list") {
+        result.append(problem)
+    }
+    for variable in ["podman_containers_file", "podman_registries_file", "podman_policy_file"] {
+        for problem in note(main.contains(variable), "account configuration written", "roles/podman/tasks/main.yml does not write `{variable}`") {
+            result.append(problem)
+        }
     }
     # The removal task has a file of its own, so the state asserted here is the
     # state of that task and not of another `state: absent` in the role.

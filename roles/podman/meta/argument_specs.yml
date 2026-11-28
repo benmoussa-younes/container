@@ -39,31 +39,56 @@ argument_specs:
         type: list
         elements: str
         required: false
-        description: The registries an unqualified image name searches.
-      podman_registries_dir:
+        description: >-
+          The registries an unqualified image name searches, and the only ones
+          the account may pull from: the image policy rejects every other
+          repository.
+      podman_short_name_mode:
         type: str
         required: false
-        description: The registries.conf.d directory.
-      podman_registries_file:
+        choices: [enforcing, permissive, disabled]
+        description: >-
+          How an ambiguous short image name resolves. `enforcing` refuses it
+          outside a terminal instead of picking the first search registry.
+      podman_config_dir:
         type: str
         required: false
-        description: The drop-in that declares the registry search path.
-      podman_containers_dir:
-        type: str
-        required: false
-        description: The containers.conf.d directory.
+        description: >-
+          The account's engine configuration directory
+          (`$HOME/.config/containers`). Podman reads it before the host-wide
+          files, and for `registries.conf` and `policy.json` the user file
+          replaces the host-wide one.
       podman_containers_file:
         type: str
         required: false
-        description: The drop-in that declares the engine settings.
+        description: The account's `containers.conf`.
+      podman_registries_file:
+        type: str
+        required: false
+        description: The account's `registries.conf`.
+      podman_policy_file:
+        type: str
+        required: false
+        description: >-
+          The account's `policy.json`: every transport except the declared
+          registries is rejected.
+      podman_legacy_registries_dir:
+        type: str
+        required: false
+        description: The host-wide `registries.conf.d` the retired roles wrote into.
+      podman_legacy_containers_dir:
+        type: str
+        required: false
+        description: The host-wide `containers.conf.d` the retired roles wrote into.
       podman_stale_config_files:
         type: list
         elements: str
         required: false
         description: >-
-          The drop-ins the retired edition roles wrote and this role removes
-          before writing its own, so exactly one file owns each configuration.
-          Defaults to `99-podman.conf` under both configuration directories.
+          The host-wide drop-ins the retired edition roles wrote, and the ones
+          this role wrote before it moved to the account's home. The role
+          removes them before writing the account's files, so exactly one file
+          owns each configuration.
       podman_no_new_privileges:
         type: bool
         required: false
@@ -89,6 +114,31 @@ argument_specs:
         type: str
         required: false
         description: The OCI runtime the engine uses.
+      podman_read_only:
+        type: bool
+        required: false
+        description: >-
+          Whether every container of the account mounts its root file system
+          read-only unless it declares otherwise.
+      podman_seccomp_profile:
+        type: str
+        required: false
+        description: The seccomp profile the engine applies by default.
+      podman_userns:
+        type: str
+        required: false
+        choices: [host, private]
+        description: The user namespace the engine creates for a container.
+      podman_default_ulimits:
+        type: list
+        elements: str
+        required: false
+        description: The ulimits a container gets unless it declares its own.
+      podman_pull_policy:
+        type: str
+        required: false
+        choices: [always, missing, never]
+        description: When the engine pulls an image before running a container.
       podman_socket_enabled:
         type: bool
         required: false

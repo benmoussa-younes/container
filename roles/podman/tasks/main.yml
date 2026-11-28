@@ -99,10 +99,22 @@
           it (account_enabled: true); run it first, or declare podman_user for
           an account that exists.
 
-    - name: The owning account's UID and home are known
+    - name: The owning account's groups are read
+      ansible.builtin.getent:
+        database: group
+
+    - name: The owning account's UID, GID and home are known
       ansible.builtin.set_fact:
         podman_uid: "{{ ansible_facts.getent_passwd[podman_user][1] }}"
+        podman_gid: "{{ ansible_facts.getent_passwd[podman_user][2] }}"
         podman_home: "{{ ansible_facts.getent_passwd[podman_user][4] }}"
+
+    - name: The owning account's primary group is known
+      ansible.builtin.set_fact:
+        podman_group: >-
+          {{ ansible_facts.getent_group | dict2items
+             | selectattr('value.1', 'equalto', podman_gid)
+             | map(attribute='key') | list | first }}
 
     # Linger comes before anything that runs as the account: `podman system
     # migrate` and `podman unshare` need `XDG_RUNTIME_DIR` (`/run/user/<uid>`),
@@ -131,18 +143,22 @@
 
     - name: The container configuration directories exist
       ansible.builtin.file:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         state: directory
-        owner: root
-        group: root
-        mode: "0755"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
       loop:
-        - "{{ podman_registries_dir }}"
-        - "{{ podman_containers_dir }}"
-        # The sysctl drop-in may be relocated (a sandbox keeps it under /var/tmp);
-        # its parent is not one of the engine's directories, so it is created
-        # here rather than assumed.
-        - "{{ podman_userns_sysctl | dirname }}"
+        # The engine reads the account's configuration before the host-wide
+        # files, and the user file replaces the host-wide one for
+        # `registries.conf` and `policy.json` (`man 5 containers.conf`,
+        # `man 5 containers-registries.conf`, `man 5 containers-policy.json`).
+        - { path: "{{ podman_home }}/.config", owner: "{{ podman_user }}", group: "{{ podman_group }}", mode: "0755" }
+        - { path: "{{ podman_config_dir }}", owner: "{{ podman_user }}", group: "{{ podman_group }}", mode: "0700" }
+        # The sysctl drop-in is host-wide: a kernel setting has no per-account
+        # form. It may be relocated (a sandbox keeps it under /var/tmp), so its
+        # parent is created here rather than assumed.
+        - { path: "{{ podman_userns_sysctl | dirname }}", owner: root, group: root, mode: "0755" }
 
     - name: The user namespace setting rootless Podman needs is declared
       ansible.builtin.copy:
@@ -197,8 +213,8 @@
       ansible.builtin.template:
         src: registries.conf.j2
         dest: "{{ podman_registries_file }}"
-        owner: root
-        group: root
+        owner: "{{ podman_user }}"
+        group: "{{ podman_group }}"
         mode: "0644"
       notify: Restart the rootless Podman socket
 
@@ -206,8 +222,17 @@
       ansible.builtin.template:
         src: containers.conf.j2
         dest: "{{ podman_containers_file }}"
-        owner: root
-        group: root
+        owner: "{{ podman_user }}"
+        group: "{{ podman_group }}"
+        mode: "0644"
+      notify: Restart the rootless Podman socket
+
+    - name: The image policy is declared
+      ansible.builtin.template:
+        src: policy.json.j2
+        dest: "{{ podman_policy_file }}"
+        owner: "{{ podman_user }}"
+        group: "{{ podman_group }}"
         mode: "0644"
       notify: Restart the rootless Podman socket
 
