@@ -15,6 +15,20 @@
       declare `container_host_edition: server` in the host's variables.
     quiet: true
 
+# `podman info` and `podman unshare` need the account's runtime directory,
+# which exists only while its user manager runs: a read-back without linger
+# fails on a host that was configured correctly.
+- name: The engine's read-back needs the account's user manager
+  ansible.builtin.assert:
+    that:
+      - not (podman_verify | bool) or (podman_linger | bool)
+    fail_msg: >-
+      podman_verify requires podman_linger: `podman info` and
+      `podman unshare` run as the account and need `/run/user/<uid>`, which
+      exists only while its user manager runs. Set `podman_linger: true`, or
+      set `podman_verify: false` and read the engine yourself.
+    quiet: true
+
 # The role names Debian paths, Debian packages and a Debian kernel setting, so
 # it refuses another base before it writes anything.
 #
@@ -68,20 +82,6 @@
         fail_msg: >-
           podman_user must name an existing non-root account; this role never
           configures the rootful engine.
-
-    # `podman info` and `podman unshare` need the account's runtime directory,
-    # which exists only while its user manager runs: a read-back without linger
-    # fails on a host that was configured correctly.
-    - name: The engine's read-back needs the account's user manager
-      ansible.builtin.assert:
-        that:
-          - not (podman_verify | bool) or (podman_linger | bool)
-        fail_msg: >-
-          podman_verify requires podman_linger: `podman info` and
-          `podman unshare` run as the account and need `/run/user/<uid>`, which
-          exists only while its user manager runs. Set `podman_linger: true`, or
-          set `podman_verify: false` and read the engine yourself.
-        quiet: true
 
     - name: The owning account is read
       ansible.builtin.getent:
